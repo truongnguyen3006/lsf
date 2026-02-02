@@ -1,0 +1,2 @@
+com.myorg.lsf.eventing.autoconfig.LsfEventingAutoConfiguration
+com.myorg.lsf.eventing.autoconfig.LsfEventingRedisAutoConfiguration

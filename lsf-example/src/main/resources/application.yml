@@ -1,0 +1,52 @@
+spring:
+  application:
+    name: lsf-example
+  data:
+    redis:
+      host: localhost
+      port: 6379
+
+lsf:
+  kafka:
+    bootstrap-servers: "localhost:9092"
+    schema-registry-url: "http://localhost:8081"
+    consumer:
+      group-id: "lsf-example-group"
+      batch: false
+      concurrency: 1
+      max-poll-records: 50
+      retry:
+        attempts: 2
+        backoff: 1000ms
+    dlq:
+      enabled: true
+      suffix: ".DLQ"
+
+  eventing:
+    consume-topics:
+      - demo-topic
+    ignore-unknown-event-type: false
+    idempotency:
+      enabled: true
+      ttl: PT24H
+      max-entries: 200000
+      cleanup-interval: 1m
+      store: redis
+      require-redis: false
+      redis:
+        enabled: true
+        key-prefix: "lsf:idemp:"
+
+logging:
+  pattern:
+    console: "%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX} %-5level ${spring.application.name:-app} [%thread] %logger{36} - corrId=%X{corrId} eventId=%X{eventId} eventType=%X{eventType} producer=%X{producer} topic=%X{topic} partition=%X{partition} offset=%X{offset} - %msg%n%ex{full}"
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+server:
+  error:
+    include-message: always
+    include-binding-errors: always

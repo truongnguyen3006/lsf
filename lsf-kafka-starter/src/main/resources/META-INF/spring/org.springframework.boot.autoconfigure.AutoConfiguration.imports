@@ -1,0 +1,4 @@
+com.myorg.lsf.kafka.KafkaAutoConfiguration
+com.myorg.lsf.kafka.KafkaProducerAutoConfiguration
+com.myorg.lsf.kafka.KafkaConsumerAutoConfiguration
+com.myorg.lsf.kafka.KafkaErrorHandlingAutoConfiguration
