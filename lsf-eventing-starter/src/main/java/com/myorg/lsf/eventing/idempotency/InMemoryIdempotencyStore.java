@@ -5,15 +5,16 @@ import lombok.extern.slf4j.Slf4j;
 import java.time.Duration;
 import java.util.Iterator;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 @Slf4j
-public class InMemoryIdempotencyStore implements IdempotencyStore, AutoCloseable  {
-    private enum State { PROCESSING, DONE }
+public class InMemoryIdempotencyStore implements IdempotencyStore, AutoCloseable {
 
+    private enum State { PROCESSING, DONE }
     private record Entry(State state, long expireAtMs, String token) {}
 
     private final ConcurrentHashMap<String, Entry> entries = new ConcurrentHashMap<>();
@@ -23,11 +24,30 @@ public class InMemoryIdempotencyStore implements IdempotencyStore, AutoCloseable
     private final int maxEntries;
 
     private final ScheduledExecutorService cleaner;
+    private final String keyPrefix; // normalized, may be ""
 
+    /**
+     * Backward compatible constructor (no prefix).
+     */
     public InMemoryIdempotencyStore(Duration doneTtl, Duration processingTtl, int maxEntries, Duration cleanupInterval) {
-        this.doneTtl = doneTtl;
-        this.processingTtl = processingTtl;
-        this.maxEntries = maxEntries;
+        this("", doneTtl, processingTtl, maxEntries, cleanupInterval);
+    }
+
+    /**
+     * New constructor: allow key namespacing (recommended: include groupId in prefix).
+     * Example: "lsf:dedup:it-group:".
+     */
+    public InMemoryIdempotencyStore(
+            String keyPrefix,
+            Duration doneTtl,
+            Duration processingTtl,
+            int maxEntries,
+            Duration cleanupInterval
+    ) {
+        this.doneTtl = requirePositive(doneTtl, "doneTtl");
+        this.processingTtl = requirePositive(processingTtl, "processingTtl");
+        this.maxEntries = Math.max(1000, maxEntries);
+        this.keyPrefix = normalizePrefix(keyPrefix);
 
         this.cleaner = Executors.newSingleThreadScheduledExecutor(r -> {
             Thread t = new Thread(r, "lsf-idempotency-cleaner");
@@ -39,14 +59,19 @@ public class InMemoryIdempotencyStore implements IdempotencyStore, AutoCloseable
         cleaner.scheduleAtFixedRate(this::cleanupExpiredSafe, periodMs, periodMs, TimeUnit.MILLISECONDS);
     }
 
+    private String key(String eventId) {
+        return keyPrefix + eventId;
+    }
+
     @Override
     public boolean isProcessed(String eventId) {
-        Entry e = entries.get(eventId);
+        String k = key(eventId);
+        Entry e = entries.get(k);
         if (e == null) return false;
 
         long now = System.currentTimeMillis();
         if (now > e.expireAtMs()) {
-            entries.remove(eventId, e);
+            entries.remove(k, e);
             return false;
         }
         return e.state() == State.DONE;
@@ -54,29 +79,27 @@ public class InMemoryIdempotencyStore implements IdempotencyStore, AutoCloseable
 
     @Override
     public void markProcessed(String eventId) {
+        String k = key(eventId);
         long exp = System.currentTimeMillis() + doneTtl.toMillis();
-        entries.put(eventId, new Entry(State.DONE, exp, null));
+        entries.put(k, new Entry(State.DONE, exp, null));
 
-        // tránh memory phình: nếu vượt ngưỡng thì dọn nhanh
         if (entries.size() > maxEntries) {
             cleanupExpired();
-            // nếu vẫn quá lớn -> xoá bớt vài key “ngẫu nhiên” (best-effort)
             trimToMaxEntries();
         }
     }
 
     @Override
     public boolean tryMarkProcessed(String eventId) {
+        String k = key(eventId);
         long now = System.currentTimeMillis();
         long exp = now + doneTtl.toMillis();
 
-        // Loop to handle the case where an existing key is expired.
         while (true) {
-            Entry cur = entries.get(eventId);
+            Entry cur = entries.get(k);
             if (cur == null) {
-                Entry prev = entries.putIfAbsent(eventId, new Entry(State.DONE, exp, null));
+                Entry prev = entries.putIfAbsent(k, new Entry(State.DONE, exp, null));
                 if (prev == null) {
-                    // newly marked
                     if (entries.size() > maxEntries) {
                         cleanupExpired();
                         trimToMaxEntries();
@@ -87,29 +110,29 @@ public class InMemoryIdempotencyStore implements IdempotencyStore, AutoCloseable
             }
 
             if (now > cur.expireAtMs()) {
-                // expired -> remove and retry
-                entries.remove(eventId, cur);
+                entries.remove(k, cur);
                 continue;
             }
-            return false; // already exists (DONE or PROCESSING)
+            return false;
         }
     }
 
     @Override
     public void unmarkProcessed(String eventId) {
-        entries.remove(eventId);
+        entries.remove(key(eventId));
     }
 
     @Override
     public Lease tryBeginProcessing(String eventId) {
+        String k = key(eventId);
         long now = System.currentTimeMillis();
         final String token = java.util.UUID.randomUUID().toString();
         final long processingExp = now + processingTtl.toMillis();
 
         while (true) {
-            Entry cur = entries.get(eventId);
+            Entry cur = entries.get(k);
             if (cur == null) {
-                Entry prev = entries.putIfAbsent(eventId, new Entry(State.PROCESSING, processingExp, token));
+                Entry prev = entries.putIfAbsent(k, new Entry(State.PROCESSING, processingExp, token));
                 if (prev == null) {
                     if (entries.size() > maxEntries) {
                         cleanupExpired();
@@ -121,7 +144,7 @@ public class InMemoryIdempotencyStore implements IdempotencyStore, AutoCloseable
             }
 
             if (now > cur.expireAtMs()) {
-                entries.remove(eventId, cur);
+                entries.remove(k, cur);
                 continue;
             }
 
@@ -132,10 +155,12 @@ public class InMemoryIdempotencyStore implements IdempotencyStore, AutoCloseable
 
     @Override
     public void markDone(String eventId, String token) {
+        String k = key(eventId);
         long now = System.currentTimeMillis();
         long doneExp = now + doneTtl.toMillis();
-        entries.computeIfPresent(eventId, (k, cur) -> {
-            if (cur.state() == State.PROCESSING && java.util.Objects.equals(cur.token(), token)) {
+
+        entries.computeIfPresent(k, (kk, cur) -> {
+            if (cur.state() == State.PROCESSING && Objects.equals(cur.token(), token)) {
                 return new Entry(State.DONE, doneExp, null);
             }
             return cur;
@@ -144,8 +169,9 @@ public class InMemoryIdempotencyStore implements IdempotencyStore, AutoCloseable
 
     @Override
     public void releaseProcessing(String eventId, String token) {
-        entries.computeIfPresent(eventId, (k, cur) -> {
-            if (cur.state() == State.PROCESSING && java.util.Objects.equals(cur.token(), token)) {
+        String k = key(eventId);
+        entries.computeIfPresent(k, (kk, cur) -> {
+            if (cur.state() == State.PROCESSING && Objects.equals(cur.token(), token)) {
                 return null; // remove
             }
             return cur;
@@ -189,4 +215,16 @@ public class InMemoryIdempotencyStore implements IdempotencyStore, AutoCloseable
         cleaner.shutdownNow();
     }
 
+    private static Duration requirePositive(Duration d, String name) {
+        if (d == null || d.isZero() || d.isNegative()) {
+            throw new IllegalArgumentException(name + " must be positive");
+        }
+        return d;
+    }
+
+    private static String normalizePrefix(String prefix) {
+        if (prefix == null || prefix.isBlank()) return "";
+        String p = prefix.trim();
+        return p.endsWith(":") ? p : (p + ":");
+    }
 }
