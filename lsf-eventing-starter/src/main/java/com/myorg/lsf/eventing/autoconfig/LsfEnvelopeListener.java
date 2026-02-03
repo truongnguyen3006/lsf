@@ -2,42 +2,66 @@ package com.myorg.lsf.eventing.autoconfig;
 
 import com.myorg.lsf.contracts.core.envelope.EventEnvelope;
 import com.myorg.lsf.eventing.LsfDispatcher;
-import com.myorg.lsf.eventing.LsfEventingProperties;
-import lombok.AllArgsConstructor;
-import lombok.Data;
+import lombok.RequiredArgsConstructor;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.springframework.kafka.annotation.KafkaListener;
-import org.springframework.kafka.support.KafkaHeaders;
-import org.springframework.messaging.handler.annotation.Header;
 
-//để app không phải tự viết @KafkaListener
-@Data
-@AllArgsConstructor
+import java.util.List;
+
+@RequiredArgsConstructor
 public class LsfEnvelopeListener {
 
     private final LsfDispatcher dispatcher;
-    private final LsfEventingProperties props;
 
     @KafkaListener(
-            topics = "#{@lsfConsumeTopics}",
+            topics = "${lsf.eventing.consume-topics:demo-topic}",
             containerFactory = "kafkaListenerContainerFactory"
     )
-    public void on(
-            EventEnvelope env,
-            @Header(KafkaHeaders.RECEIVED_TOPIC) String topic,
-            @Header(KafkaHeaders.RECEIVED_PARTITION) int partition,
-            @Header(KafkaHeaders.OFFSET) long offset
-    ) {
-        // set MDC (nếu bạn muốn đặt ở đây thay vì dispatcher)
-        org.slf4j.MDC.put("topic", topic);
-        org.slf4j.MDC.put("partition", String.valueOf(partition));
-        org.slf4j.MDC.put("offset", String.valueOf(offset));
+    public void onMessage(Object payload) {
+        if (payload == null) return;
 
-        try {
+        // single value
+        if (payload instanceof EventEnvelope env) {
             dispatcher.dispatch(env);
-        } finally {
-            org.slf4j.MDC.remove("topic");
-            org.slf4j.MDC.remove("partition");
-            org.slf4j.MDC.remove("offset");
+            return;
         }
+
+        // single record
+        if (payload instanceof ConsumerRecord<?, ?> rec) {
+            handleValue(rec.value());
+            return;
+        }
+
+        // batch records (ConsumerRecords)
+        if (payload instanceof ConsumerRecords<?, ?> recs) {
+            recs.forEach(r -> handleValue(r.value()));
+            return;
+        }
+
+        // batch as List (values or records)
+        if (payload instanceof List<?> list) {
+            for (Object item : list) {
+                if (item instanceof EventEnvelope env) {
+                    dispatcher.dispatch(env);
+                } else if (item instanceof ConsumerRecord<?, ?> rec) {
+                    handleValue(rec.value());
+                } else {
+                    handleValue(item);
+                }
+            }
+            return;
+        }
+
+        throw new IllegalArgumentException("Unsupported Kafka payload type: " + payload.getClass());
+    }
+
+    private void handleValue(Object value) {
+        if (value == null) return;
+        if (value instanceof EventEnvelope env) {
+            dispatcher.dispatch(env);
+            return;
+        }
+        throw new IllegalArgumentException("Expected EventEnvelope but got: " + value.getClass());
     }
 }

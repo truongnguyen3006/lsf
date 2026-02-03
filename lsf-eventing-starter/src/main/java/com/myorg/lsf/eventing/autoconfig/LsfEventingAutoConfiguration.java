@@ -6,6 +6,8 @@ import com.myorg.lsf.eventing.idempotency.IdempotencyStore;
 import com.myorg.lsf.eventing.idempotency.InMemoryIdempotencyStore;
 import com.myorg.lsf.eventing.idempotency.RedisIdempotencyStore;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.aop.framework.AopProxyUtils;
+import org.springframework.aop.support.AopUtils;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.*;
@@ -13,9 +15,12 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.MethodIntrospector;
+import org.springframework.core.annotation.AnnotatedElementUtils;
 import org.springframework.core.env.Environment;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
 import java.lang.reflect.Method;
@@ -47,27 +52,31 @@ public class LsfEventingAutoConfiguration {
         return new DefaultLsfPublisher(template, mapper, producer);
     }
 
-    /**
-     * Scan beans for @LsfEventHandler methods and register them.
-     */
     @Bean
     @ConditionalOnMissingBean(name = "lsfHandlerScanner")
     public Object lsfHandlerScanner(ApplicationContext ctx, HandlerRegistry registry, ObjectMapper mapper) {
-        Map<String, Object> beans = ctx.getBeansWithAnnotation(org.springframework.stereotype.Component.class);
-        beans.values().forEach(bean -> {
-            for (Method m : bean.getClass().getMethods()) {
-                LsfEventHandler ann = m.getAnnotation(LsfEventHandler.class);
-                if (ann == null) continue;
+        Map<String, Object> beans = ctx.getBeansWithAnnotation(Component.class);
 
-                String eventType = ann.value();
-                Class<?> payloadClass = ann.payload();
-                registry.register(eventType, new HandlerMethodInvoker(bean, m, payloadClass, mapper));
-            }
+        beans.values().forEach(bean -> {
+            Class<?> targetClass = AopProxyUtils.ultimateTargetClass(bean);
+            if (targetClass == null) targetClass = bean.getClass();
+
+            Map<Method, LsfEventHandler> methods = MethodIntrospector.selectMethods(
+                    targetClass,
+                    (Method m) -> AnnotatedElementUtils.findMergedAnnotation(m, LsfEventHandler.class)
+            );
+
+            methods.forEach((method, ann) -> {
+                // rất quan trọng cho JDK proxy
+                Method invocable = AopUtils.selectInvocableMethod(method, bean.getClass());
+                registry.register(ann.value(), new HandlerMethodInvoker(bean, invocable, ann.payload(), mapper));
+            });
         });
 
-        // marker object
+        // marker bean để đảm bảo scanner chạy 1 lần
         return new Object();
     }
+
 
     @Bean
     @ConditionalOnProperty(prefix = "lsf.eventing.listener", name = "enabled", havingValue = "true", matchIfMissing = true)
@@ -75,7 +84,7 @@ public class LsfEventingAutoConfiguration {
             "('${lsf.eventing.consume-topics:}'.length() > 0) || ('${lsf.eventing.consume-topics[0]:}'.length() > 0)"
     )
     public LsfEnvelopeListener lsfEnvelopeListener(LsfDispatcher dispatcher, LsfEventingProperties props) {
-        return new LsfEnvelopeListener(dispatcher, props);
+        return new LsfEnvelopeListener(dispatcher);
     }
 
     /**

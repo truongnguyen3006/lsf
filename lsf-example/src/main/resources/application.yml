@@ -31,7 +31,7 @@ lsf:
       ttl: PT24H
       max-entries: 200000
       cleanup-interval: 1m
-      store: redis
+      store: auto
       require-redis: false
       redis:
         enabled: true

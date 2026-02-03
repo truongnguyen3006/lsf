@@ -12,6 +12,8 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Properties;
 import java.util.concurrent.TimeUnit;
+import org.apache.kafka.common.TopicPartition;
+import java.util.Set;
 
 @Testcontainers
 public abstract class AbstractIntegrationTest {
@@ -67,4 +69,45 @@ public abstract class AbstractIntegrationTest {
     static int redisPort() {
         return REDIS.getMappedPort(6379);
     }
+    static void awaitGroupReady(String groupId, String topic, int expectedMembers, int expectedPartitions, Duration timeout) {
+        Properties props = new Properties();
+        props.put(AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG, kafkaBootstrap());
+
+        long deadline = System.nanoTime() + timeout.toNanos();
+        Exception last = null;
+
+        try (AdminClient admin = AdminClient.create(props)) {
+            while (System.nanoTime() < deadline) {
+                try {
+                    ConsumerGroupDescription desc = admin.describeConsumerGroups(List.of(groupId))
+                            .describedGroups()
+                            .get(groupId)
+                            .get(5, TimeUnit.SECONDS);
+
+                    int members = desc.members().size();
+                    Set<TopicPartition> assigned = desc.members().stream()
+                            .flatMap(m -> m.assignment().topicPartitions().stream())
+                            .filter(tp -> tp.topic().equals(topic))
+                            .collect(java.util.stream.Collectors.toSet());
+
+                    if (members >= expectedMembers && assigned.size() >= expectedPartitions) {
+                        return;
+                    }
+                } catch (Exception e) {
+                    last = e;
+                }
+
+                try { Thread.sleep(200); } catch (InterruptedException ignored) {}
+            }
+        }
+
+        throw new IllegalStateException(
+                "Timeout waiting consumer group ready: groupId=" + groupId
+                        + ", topic=" + topic
+                        + ", expectedMembers=" + expectedMembers
+                        + ", expectedPartitions=" + expectedPartitions,
+                last
+        );
+    }
+
 }
