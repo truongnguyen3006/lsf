@@ -67,7 +67,7 @@ public class LsfEventingAutoConfiguration {
             );
 
             methods.forEach((method, ann) -> {
-                // rất quan trọng cho JDK proxy
+                // quan trọng: chọn method invocable trên proxy class
                 Method invocable = AopUtils.selectInvocableMethod(method, bean.getClass());
                 registry.register(ann.value(), new HandlerMethodInvoker(bean, invocable, ann.payload(), mapper));
             });
@@ -76,6 +76,7 @@ public class LsfEventingAutoConfiguration {
         // marker bean để đảm bảo scanner chạy 1 lần
         return new Object();
     }
+
 
 
     @Bean
