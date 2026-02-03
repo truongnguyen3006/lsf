@@ -19,7 +19,7 @@ import org.springframework.util.StringUtils;
 import java.util.HashMap;
 import java.util.Map;
 
-@AutoConfiguration
+@AutoConfiguration(before = org.springframework.boot.autoconfigure.kafka.KafkaAutoConfiguration.class)
 @ConditionalOnClass(ConcurrentKafkaListenerContainerFactory.class)
 @EnableConfigurationProperties(KafkaProperties.class)
 public class KafkaConsumerAutoConfiguration {
