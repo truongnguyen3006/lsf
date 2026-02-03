@@ -84,13 +84,18 @@ public class LsfEventingRedisAutoConfiguration {
 
         @Bean
         @ConditionalOnMissingBean(IdempotencyStore.class)
-        public IdempotencyStore idempotencyStore(LsfEventingProperties props, StringRedisTemplate redis) {
+        public IdempotencyStore idempotencyStore(LsfEventingProperties props, StringRedisTemplate redis, Environment env) {
             var idem = props.getIdempotency();
             if (!idem.getRedis().isEnabled()) {
                 throw new IllegalStateException("store=redis nhưng lsf.eventing.idempotency.redis.enabled=false");
             }
-            return new RedisIdempotencyStore(redis, idem.getTtl(), idem.getProcessingTtl(), idem.getRedis().getKeyPrefix());
+
+            String groupId = resolveGroupId(env);
+            String prefix = effectiveKeyPrefix(idem.getRedis().getKeyPrefix(), groupId);
+
+            return new RedisIdempotencyStore(redis, idem.getTtl(), idem.getProcessingTtl(), prefix);
         }
+
     }
 
     /**
@@ -111,9 +116,34 @@ public class LsfEventingRedisAutoConfiguration {
 
         @Bean
         @ConditionalOnMissingBean(IdempotencyStore.class)
-        public IdempotencyStore idempotencyStore(LsfEventingProperties props, StringRedisTemplate redis) {
+        public IdempotencyStore idempotencyStore(LsfEventingProperties props, StringRedisTemplate redis, Environment env) {
             var idem = props.getIdempotency();
-            return new RedisIdempotencyStore(redis, idem.getTtl(), idem.getProcessingTtl(), idem.getRedis().getKeyPrefix());
+            String groupId = resolveGroupId(env);
+            String prefix = effectiveKeyPrefix(idem.getRedis().getKeyPrefix(), groupId);
+            return new RedisIdempotencyStore(redis, idem.getTtl(), idem.getProcessingTtl(), prefix);
         }
+
     }
+
+    private static String resolveGroupId(Environment env) {
+        String gid = env.getProperty("lsf.kafka.consumer.group-id");
+        if (!StringUtils.hasText(gid)) {
+            gid = env.getProperty("spring.kafka.consumer.group-id");
+        }
+        if (!StringUtils.hasText(gid)) gid = "default-group";
+        return gid.trim().replaceAll("\\s+", "_");
+    }
+
+    private static String effectiveKeyPrefix(String configuredPrefix, String groupId) {
+        String base = StringUtils.hasText(configuredPrefix) ? configuredPrefix.trim() : "lsf:dedup";
+        if (!base.endsWith(":")) base = base + ":";
+
+        if (base.contains("{groupId}")) {
+            String replaced = base.replace("{groupId}", groupId);
+            return replaced.endsWith(":") ? replaced : (replaced + ":");
+        }
+        if (base.endsWith(groupId + ":")) return base;
+        return base + groupId + ":";
+    }
+
 }
