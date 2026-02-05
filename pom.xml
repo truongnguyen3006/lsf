@@ -17,6 +17,8 @@
         <module>lsf-quota-streams-starter</module>
         <module>lsf-observability-starter</module>
         <module>lsf-example</module>
+        <module>lsf-outbox-mysql-starter</module>
+        <module>lsf-outbox-core</module>
     </modules>
 
     <properties>
@@ -26,6 +28,7 @@
         <spring-boot.version>3.5.7</spring-boot.version>
         <spring-cloud.version>2025.0.0</spring-cloud.version>
         <confluent.version>7.6.0</confluent.version>
+        <flyway.version>10.22.0</flyway.version>
     </properties>
 
     <repositories>
@@ -51,6 +54,18 @@
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
+            <dependency>
+                <groupId>org.flywaydb</groupId>
+                <artifactId>flyway-core</artifactId>
+                <version>${flyway.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.flywaydb</groupId>
+                <artifactId>flyway-mysql</artifactId>
+                <version>${flyway.version}</version>
+            </dependency>
+
         </dependencies>
     </dependencyManagement>
     <build>
