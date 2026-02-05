@@ -5,6 +5,9 @@ spring:
     redis:
       host: localhost
       port: 6379
+  profiles:
+    default: outbox-mysql
+
 
 lsf:
   kafka:
@@ -50,3 +53,4 @@ server:
   error:
     include-message: always
     include-binding-errors: always
+
