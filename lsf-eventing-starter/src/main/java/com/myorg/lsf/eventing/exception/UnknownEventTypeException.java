@@ -4,7 +4,6 @@ import com.myorg.lsf.contracts.core.exception.LsfNonRetryableException;
 
 public class UnknownEventTypeException extends LsfNonRetryableException {
     public UnknownEventTypeException(String eventType, String eventId) {
-        super("No handler for eventType=" + eventType + ", eventId=" + eventId);
+        super("UNKNOWN_EVENT_TYPE", "No handler for eventType=" + eventType + ", eventId=" + eventId);
     }
 }
-

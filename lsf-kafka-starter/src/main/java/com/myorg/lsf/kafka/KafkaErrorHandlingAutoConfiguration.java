@@ -26,8 +26,12 @@ import org.springframework.kafka.listener.RetryListener;
 import org.springframework.kafka.support.serializer.DeserializationException;
 import org.springframework.util.backoff.FixedBackOff;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.apache.kafka.common.header.Headers;
+import org.apache.kafka.common.header.internals.RecordHeaders;
 
-
+import java.nio.charset.StandardCharsets;
+import java.time.Instant;
+import java.util.function.BiFunction;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
@@ -45,7 +49,9 @@ public class KafkaErrorHandlingAutoConfiguration {
     @ConditionalOnMissingBean
     public DeadLetterPublishingRecoverer dlqRecover(
             KafkaProperties props,
-            ObjectProvider<KafkaTemplate<String, Object>> templateProvider
+            ObjectProvider<KafkaTemplate<String, Object>> templateProvider,
+            Environment env,
+            ObjectProvider<LsfDlqReasonClassifier> classifierProvider
     ) {
         KafkaTemplate<String, Object> template = templateProvider.getIfAvailable();
         if (template == null) {
@@ -55,11 +61,19 @@ public class KafkaErrorHandlingAutoConfiguration {
             );
         }
 
-        return new DeadLetterPublishingRecoverer(
+        DeadLetterPublishingRecoverer recoverer = new DeadLetterPublishingRecoverer(
                 template,
                 (rec, ex) -> new TopicPartition(rec.topic() + props.getDlq().getSuffix(), rec.partition())
         );
+
+        String service = env.getProperty("spring.application.name", "unknown-service");
+        LsfDlqReasonClassifier classifier = classifierProvider.getIfAvailable(DefaultLsfDlqReasonClassifier::new);
+
+        tryAttachDlqHeadersFunction(recoverer, service, classifier);
+
+        return recoverer;
     }
+
 
 
     /**
@@ -115,6 +129,13 @@ public class KafkaErrorHandlingAutoConfiguration {
 
         return handler;
     }
+
+    @Bean
+    @ConditionalOnMissingBean
+    public LsfDlqReasonClassifier lsfDlqReasonClassifier() {
+        return new DefaultLsfDlqReasonClassifier();
+    }
+
 
 
     @Slf4j
@@ -326,4 +347,57 @@ public class KafkaErrorHandlingAutoConfiguration {
                     .increment();
         }
     }
+
+    private static void tryAttachDlqHeadersFunction(
+            DeadLetterPublishingRecoverer recoverer,
+            String service,
+            LsfDlqReasonClassifier classifier
+    ) {
+        try {
+            Method m = recoverer.getClass().getMethod("setHeadersFunction", BiFunction.class);
+
+            BiFunction<ConsumerRecord<?, ?>, Exception, Headers> f = (rec, ex) -> {
+                RecordHeaders headers = new RecordHeaders(rec.headers());
+
+                // classify reason
+                LsfDlqReasonClassifier.Decision decision = classifier.classify(rec, ex);
+
+                Throwable root = NestedExceptionUtils.getMostSpecificCause(ex);
+                if (root == null) root = ex;
+
+                putHeader(headers, LsfDlqHeaders.REASON, decision.reason());
+                putHeader(headers, LsfDlqHeaders.NON_RETRYABLE, String.valueOf(decision.nonRetryable()));
+
+                putHeader(headers, LsfDlqHeaders.EXCEPTION_CLASS, root.getClass().getName());
+                putHeader(headers, LsfDlqHeaders.EXCEPTION_MESSAGE, safeMsg(root.getMessage(), 512));
+
+                putHeader(headers, LsfDlqHeaders.SERVICE, service);
+                putHeader(headers, LsfDlqHeaders.TS_MS, String.valueOf(Instant.now().toEpochMilli()));
+
+                return headers;
+            };
+
+            m.invoke(recoverer, f);
+        } catch (NoSuchMethodException ignored) {
+            // Spring Kafka version không support headers function -> bỏ qua, vẫn publish DLQ bình thường
+        } catch (Exception e) {
+            log.warn("Failed to attach DLQ headers function: {}", e.toString());
+        }
+    }
+
+    private static void putHeader(Headers headers, String key, String value) {
+        if (value == null) value = "";
+        headers.remove(key);
+        headers.add(key, value.getBytes(StandardCharsets.UTF_8));
+    }
+
+    private static String safeMsg(String msg, int maxLen) {
+        if (msg == null) return "";
+        if (msg.length() <= maxLen) return msg;
+        return msg.substring(0, maxLen);
+    }
+
+
+
+
 }

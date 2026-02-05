@@ -53,6 +53,13 @@ public class LsfEventingAutoConfiguration {
     }
 
     @Bean
+    @ConditionalOnMissingBean
+    public PayloadConverter payloadConverter(ObjectMapper mapper) {
+        return new JacksonPayloadConverter(mapper);
+    }
+
+
+    @Bean
     @ConditionalOnMissingBean(name = "lsfHandlerScanner")
     public Object lsfHandlerScanner(ApplicationContext ctx, HandlerRegistry registry, ObjectMapper mapper) {
         Map<String, Object> beans = ctx.getBeansWithAnnotation(Component.class);
@@ -84,8 +91,8 @@ public class LsfEventingAutoConfiguration {
     @ConditionalOnExpression(
             "('${lsf.eventing.consume-topics:}'.length() > 0) || ('${lsf.eventing.consume-topics[0]:}'.length() > 0)"
     )
-    public LsfEnvelopeListener lsfEnvelopeListener(LsfDispatcher dispatcher, LsfEventingProperties props) {
-        return new LsfEnvelopeListener(dispatcher);
+    public LsfEnvelopeListener lsfEnvelopeListener(LsfDispatcher dispatcher, PayloadConverter payloadConverter, LsfEventingProperties props) {
+        return new LsfEnvelopeListener(dispatcher, payloadConverter);
     }
 
     /**
@@ -147,10 +154,19 @@ public class LsfEventingAutoConfiguration {
 
         @Bean(destroyMethod = "close")
         @ConditionalOnMissingBean(IdempotencyStore.class)
-        public IdempotencyStore idempotencyStore(LsfEventingProperties props) {
+        public IdempotencyStore idempotencyStore(LsfEventingProperties props, Environment env) {
             var idem = props.getIdempotency();
-            return new InMemoryIdempotencyStore(idem.getTtl(), idem.getProcessingTtl(), idem.getMaxEntries(), idem.getCleanupInterval());
+            String groupId = resolveGroupId(env);
+            String prefix = effectiveKeyPrefix(idem.getKeyPrefix(), groupId);
+            return new InMemoryIdempotencyStore(
+                    prefix,
+                    idem.getTtl(),
+                    idem.getProcessingTtl(),
+                    idem.getMaxEntries(),
+                    idem.getCleanupInterval()
+            );
         }
+
     }
 
     @Configuration
@@ -159,10 +175,21 @@ public class LsfEventingAutoConfiguration {
     static class RedisIdempotencyConfig {
         @Bean
         @ConditionalOnMissingBean(IdempotencyStore.class)
-        IdempotencyStore idempotencyStore(StringRedisTemplate redis, LsfEventingProperties props) {
+        IdempotencyStore idempotencyStore(StringRedisTemplate redis, LsfEventingProperties props, Environment env) {
             var idem = props.getIdempotency();
-            return new RedisIdempotencyStore(redis, idem.getTtl(), idem.getProcessingTtl(), idem.getKeyPrefix());
+
+            String groupId = resolveGroupId(env);
+
+            // ưu tiên redis.keyPrefix nếu có, fallback về idem.getKeyPrefix()
+            String rawPrefix = (idem.getRedis() != null && StringUtils.hasText(idem.getRedis().getKeyPrefix()))
+                    ? idem.getRedis().getKeyPrefix()
+                    : idem.getKeyPrefix();
+
+            String prefix = effectiveKeyPrefix(rawPrefix, groupId);
+
+            return new RedisIdempotencyStore(redis, idem.getTtl(), idem.getProcessingTtl(), prefix);
         }
+
     }
 
 
@@ -174,6 +201,28 @@ public class LsfEventingAutoConfiguration {
             org.springframework.context.ApplicationContext ctx
     ) {
         return new IdempotencyGuard(props, env, ctx);
+    }
+
+    private static String resolveGroupId(Environment env) {
+        String gid = env.getProperty("lsf.kafka.consumer.group-id");
+        if (!StringUtils.hasText(gid)) {
+            gid = env.getProperty("spring.kafka.consumer.group-id");
+        }
+        if (!StringUtils.hasText(gid)) gid = "default-group";
+        // Redis key friendly
+        return gid.trim().replaceAll("\\s+", "_");
+    }
+
+    private static String effectiveKeyPrefix(String configuredPrefix, String groupId) {
+        String base = StringUtils.hasText(configuredPrefix) ? configuredPrefix.trim() : "lsf:dedup";
+        if (!base.endsWith(":")) base = base + ":";
+
+        if (base.contains("{groupId}")) {
+            String replaced = base.replace("{groupId}", groupId);
+            return replaced.endsWith(":") ? replaced : (replaced + ":");
+        }
+        if (base.endsWith(groupId + ":")) return base;
+        return base + groupId + ":";
     }
 
 
