@@ -1,7 +1,9 @@
 package com.myorg.lsf.eventing.autoconfig;
 
 import com.myorg.lsf.contracts.core.envelope.EventEnvelope;
+import com.myorg.lsf.eventing.PayloadConverter;
 import com.myorg.lsf.eventing.LsfDispatcher;
+import com.myorg.lsf.eventing.context.LsfDispatchOutcome;
 import lombok.RequiredArgsConstructor;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
@@ -13,55 +15,58 @@ import java.util.List;
 public class LsfEnvelopeListener {
 
     private final LsfDispatcher dispatcher;
+    private final PayloadConverter payloadConverter;
 
     @KafkaListener(
-            topics = "${lsf.eventing.consume-topics:demo-topic}",
+            topics = "#{@lsfConsumeTopics}",
             containerFactory = "kafkaListenerContainerFactory"
     )
     public void onMessage(Object payload) {
         if (payload == null) return;
 
-        // single value
-        if (payload instanceof EventEnvelope env) {
-            dispatcher.dispatch(env);
-            return;
-        }
-
-        // single record
-        if (payload instanceof ConsumerRecord<?, ?> rec) {
-            handleValue(rec.value());
-            return;
-        }
-
-        // batch records (ConsumerRecords)
-        if (payload instanceof ConsumerRecords<?, ?> recs) {
-            recs.forEach(r -> handleValue(r.value()));
-            return;
-        }
-
-        // batch as List (values or records)
-        if (payload instanceof List<?> list) {
-            for (Object item : list) {
-                if (item instanceof EventEnvelope env) {
-                    dispatcher.dispatch(env);
-                } else if (item instanceof ConsumerRecord<?, ?> rec) {
-                    handleValue(rec.value());
-                } else {
-                    handleValue(item);
-                }
+        try {
+            // single record
+            if (payload instanceof ConsumerRecord<?, ?> rec) {
+                dispatchOne(rec.value());
+                return;
             }
-            return;
-        }
 
-        throw new IllegalArgumentException("Unsupported Kafka payload type: " + payload.getClass());
+            // batch records (ConsumerRecords)
+            if (payload instanceof ConsumerRecords<?, ?> recs) {
+                recs.forEach(r -> dispatchOne(r.value()));
+                return;
+            }
+
+            // batch as List (values or records)
+            if (payload instanceof List<?> list) {
+                for (Object item : list) {
+                    if (item instanceof ConsumerRecord<?, ?> rec2) {
+                        dispatchOne(rec2.value());
+                    } else {
+                        dispatchOne(item);
+                    }
+                }
+                return;
+            }
+
+            // single value
+            dispatchOne(payload);
+        } finally {
+            // safety net: avoid leaking marker between polls/records
+            LsfDispatchOutcome.clear();
+        }
     }
 
-    private void handleValue(Object value) {
+    private void dispatchOne(Object value) {
         if (value == null) return;
-        if (value instanceof EventEnvelope env) {
+
+        try {
+            EventEnvelope env = payloadConverter.toEnvelope(value);
+            if (env == null) return;
             dispatcher.dispatch(env);
-            return;
+        } finally {
+            // if observability wrapper isn't present, this prevents thread-local leak
+            LsfDispatchOutcome.clear();
         }
-        throw new IllegalArgumentException("Expected EventEnvelope but got: " + value.getClass());
     }
 }

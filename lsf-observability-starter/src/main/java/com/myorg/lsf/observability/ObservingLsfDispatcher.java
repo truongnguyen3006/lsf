@@ -2,6 +2,8 @@ package com.myorg.lsf.observability;
 
 import com.myorg.lsf.contracts.core.envelope.EventEnvelope;
 import com.myorg.lsf.eventing.LsfDispatcher;
+import com.myorg.lsf.eventing.context.LsfDispatchOutcome;
+import io.micrometer.core.instrument.Timer;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.MDC;
 
@@ -10,7 +12,7 @@ public class ObservingLsfDispatcher implements LsfDispatcher {
 
     private final LsfDispatcher delegate;
     private final LsfObservabilityProperties props;
-    private final LsfMetrics metrics; // có thể null (optional)
+    private final LsfMetrics metrics; // can be null if metrics disabled
 
     @Override
     public void dispatch(EventEnvelope env) {
@@ -18,24 +20,34 @@ public class ObservingLsfDispatcher implements LsfDispatcher {
             putMdc(env);
         }
 
-        LsfMetrics.Sample sample = (metrics != null && props.isMetricsEnabled())
-                ? metrics.start()
+        Timer.Sample sample = (metrics != null && props.isMetricsEnabled())
+                ? metrics.startTimer()
                 : null;
 
         try {
             delegate.dispatch(env);
 
             if (metrics != null && props.isMetricsEnabled()) {
-                metrics.countHandled(env);
-                metrics.stop(sample, env, "success");
+                String outcome = LsfDispatchOutcome.consume();
+                if (outcome == null) outcome = "success";
+
+                switch (outcome) {
+                    case LsfDispatchOutcome.DUPLICATE -> metrics.incDuplicate();
+                    case LsfDispatchOutcome.IN_FLIGHT -> metrics.incInFlight();
+                    default -> metrics.incHandledSuccess();
+                }
+
+                metrics.stopTimer(sample, env, outcome);
             }
         } catch (RuntimeException e) {
             if (metrics != null && props.isMetricsEnabled()) {
-                metrics.countFailed(env);
-                metrics.stop(sample, env, "fail");
+                metrics.incHandledFail();
+                metrics.stopTimer(sample, env, "fail");
             }
             throw e;
         } finally {
+            // safety net
+            LsfDispatchOutcome.clear();
             if (props.isMdcEnabled()) {
                 clearMdc();
             }
@@ -43,16 +55,15 @@ public class ObservingLsfDispatcher implements LsfDispatcher {
     }
 
     private void putMdc(EventEnvelope env) {
+        if (env == null) return;
         if (env.getCorrelationId() != null) MDC.put("corrId", env.getCorrelationId());
         if (env.getEventId() != null) MDC.put("eventId", env.getEventId());
         if (env.getEventType() != null) MDC.put("eventType", env.getEventType());
-        if (env.getProducer() != null) MDC.put("producer", env.getProducer());
     }
 
     private void clearMdc() {
         MDC.remove("corrId");
         MDC.remove("eventId");
         MDC.remove("eventType");
-        MDC.remove("producer");
     }
 }

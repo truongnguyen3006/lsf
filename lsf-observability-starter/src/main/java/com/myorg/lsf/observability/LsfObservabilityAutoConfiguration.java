@@ -1,12 +1,14 @@
 package com.myorg.lsf.observability;
 
 import com.myorg.lsf.eventing.LsfDispatcher;
-import com.myorg.lsf.observability.*;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.config.BeanPostProcessor;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
-import org.springframework.boot.autoconfigure.condition.*;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.context.SmartLifecycle;
 import org.springframework.context.annotation.Bean;
 import org.springframework.core.env.Environment;
 
@@ -17,26 +19,53 @@ public class LsfObservabilityAutoConfiguration {
 
     @Bean
     @ConditionalOnClass(MeterRegistry.class)
-    @ConditionalOnBean(MeterRegistry.class) //  không có MeterRegistry thì không tạo bean này
+    @ConditionalOnBean(MeterRegistry.class)
     public LsfMetrics lsfMetrics(MeterRegistry registry, Environment env, LsfObservabilityProperties props) {
         String app = env.getProperty("spring.application.name", "unknown-service");
         return new LsfMetrics(registry, app, props);
     }
 
+    /**
+     * Pre-register meters at startup so /actuator/metrics/<name> never returns 404.
+     */
     @Bean
-    public static org.springframework.beans.factory.config.BeanPostProcessor observingDispatcherBpp(
+    public SmartLifecycle lsfMetricsPreRegisterLifecycle(
             LsfObservabilityProperties props,
             ObjectProvider<LsfMetrics> metricsProvider
     ) {
-        return new org.springframework.beans.factory.config.BeanPostProcessor() {
+        return new SmartLifecycle() {
+            private boolean running = false;
+
+            @Override public void start() {
+                if (!props.isEnabled() || !props.isMetricsEnabled()) {
+                    running = true;
+                    return;
+                }
+                LsfMetrics m = metricsProvider.getIfAvailable();
+                if (m != null) m.preRegisterBaseMeters();
+                running = true;
+            }
+
+            @Override public void stop() { running = false; }
+            @Override public boolean isRunning() { return running; }
+            @Override public int getPhase() { return Integer.MIN_VALUE; } // start very early
+        };
+    }
+
+    @Bean
+    public static BeanPostProcessor observingDispatcherBpp(
+            LsfObservabilityProperties props,
+            ObjectProvider<LsfMetrics> metricsProvider
+    ) {
+        return new BeanPostProcessor() {
             @Override
             public Object postProcessAfterInitialization(Object bean, String beanName) {
                 if (!props.isEnabled()) return bean;
-                if (!(bean instanceof LsfDispatcher d)) return bean;
+                if (!(bean instanceof LsfDispatcher)) return bean;
+                if (bean instanceof ObservingLsfDispatcher) return bean;
 
-                // metrics có thể null nếu app không có MeterRegistry
                 LsfMetrics metrics = metricsProvider.getIfAvailable();
-                return new ObservingLsfDispatcher(d, props, metrics);
+                return new ObservingLsfDispatcher((LsfDispatcher) bean, props, metrics);
             }
         };
     }

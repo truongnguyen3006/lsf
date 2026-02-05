@@ -53,6 +53,13 @@ public class LsfEventingAutoConfiguration {
     }
 
     @Bean
+    @ConditionalOnMissingBean
+    public PayloadConverter payloadConverter(ObjectMapper mapper) {
+        return new JacksonPayloadConverter(mapper);
+    }
+
+
+    @Bean
     @ConditionalOnMissingBean(name = "lsfHandlerScanner")
     public Object lsfHandlerScanner(ApplicationContext ctx, HandlerRegistry registry, ObjectMapper mapper) {
         Map<String, Object> beans = ctx.getBeansWithAnnotation(Component.class);
@@ -84,8 +91,8 @@ public class LsfEventingAutoConfiguration {
     @ConditionalOnExpression(
             "('${lsf.eventing.consume-topics:}'.length() > 0) || ('${lsf.eventing.consume-topics[0]:}'.length() > 0)"
     )
-    public LsfEnvelopeListener lsfEnvelopeListener(LsfDispatcher dispatcher, LsfEventingProperties props) {
-        return new LsfEnvelopeListener(dispatcher);
+    public LsfEnvelopeListener lsfEnvelopeListener(LsfDispatcher dispatcher, PayloadConverter payloadConverter, LsfEventingProperties props) {
+        return new LsfEnvelopeListener(dispatcher, payloadConverter);
     }
 
     /**
