@@ -10,4 +10,15 @@ spring:
 lsf:
   outbox:
     enabled: true
-    table: lsf_outbox
+    publisher:
+      enabled: true
+      poll-interval: 1s
+      initial-delay: 1s
+      batch-size: 50
+      lease: 10s
+      backoff-base: 1s
+      backoff-max: 60s
+      max-retries: 10
+      send-timeout: 10s
+    metrics:
+      enabled: true
