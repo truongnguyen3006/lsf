@@ -19,6 +19,7 @@
         <module>lsf-example</module>
         <module>lsf-outbox-mysql-starter</module>
         <module>lsf-outbox-core</module>
+        <module>lsf-outbox-postgres-starter</module>
     </modules>
 
     <properties>
@@ -63,6 +64,11 @@
             <dependency>
                 <groupId>org.flywaydb</groupId>
                 <artifactId>flyway-mysql</artifactId>
+                <version>${flyway.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.flywaydb</groupId>
+                <artifactId>flyway-database-postgresql</artifactId>
                 <version>${flyway.version}</version>
             </dependency>
 
