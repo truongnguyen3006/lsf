@@ -2,7 +2,7 @@ package com.demo.app;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.myorg.lsf.contracts.core.envelope.EventEnvelope;
-import com.myorg.lsf.outbox.mysql.OutboxWriter;
+import com.myorg.lsf.outbox.OutboxWriter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.transaction.annotation.Transactional;

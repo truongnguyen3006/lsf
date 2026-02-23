@@ -1,7 +1,9 @@
-package com.myorg.lsf.outbox.mysql;
+package com.myorg.lsf.outbox;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.myorg.lsf.contracts.core.envelope.EventEnvelope;
+import com.myorg.lsf.outbox.mysql.JdbcOutboxWriter;
+import com.myorg.lsf.outbox.mysql.LsfOutboxMySqlProperties;
 import org.flywaydb.core.Flyway;
 import org.h2.jdbcx.JdbcDataSource;
 import org.junit.jupiter.api.Test;

@@ -3,6 +3,7 @@ package com.myorg.lsf.outbox.mysql;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.myorg.lsf.contracts.core.envelope.EventEnvelope;
+import com.myorg.lsf.outbox.OutboxWriter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
@@ -30,7 +31,7 @@ public class JdbcOutboxWriter implements OutboxWriter {
 
         KeyHolder kh = new GeneratedKeyHolder();
         jdbc.update(con -> {
-            // ✅ ask only for the 'id' column key (fixes H2 returning multiple keys)
+            // ask only for the 'id' column key (fixes H2 returning multiple keys)
             PreparedStatement ps = con.prepareStatement(sql, new String[]{"id"});
             ps.setString(1, topic);
             ps.setString(2, key);
