@@ -16,14 +16,16 @@ import org.springframework.kafka.support.serializer.JsonSerializer;
 
 import java.util.HashMap;
 import java.util.Map;
-
+//Tạo ra các đối tượng để ứng dụng có thể gửi tin nhắn lên Kafka.
 @AutoConfiguration(before = org.springframework.boot.autoconfigure.kafka.KafkaAutoConfiguration.class)
 //chỉ chạy nếu app có spring-kafka trên classpath.
+//import thư viện spring-kafka gốc của Spring
 @ConditionalOnClass(KafkaTemplate.class)
 @EnableConfigurationProperties(KafkaProperties.class)
 public class KafkaProducerAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean
+    //Nạp các thông số từ KafkaProperties vào ProducerConfig của Kafka.
     public ProducerFactory<String, Object> producerFactory(KafkaProperties props, SerdeFactory serdeFactory) {
         Map<String, Object> p = new HashMap<>();
         //bootstrap.servers là danh sách broker (host:port)
@@ -50,6 +52,7 @@ public class KafkaProducerAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
+    //Tạo bean KafkaTemplate đây là (interface) mà các developer sẽ @Autowired vào code của họ để gọi hàm send()
     public KafkaTemplate<String, Object> kafkaTemplate(ProducerFactory<String, Object> pf) {
         return new KafkaTemplate<>(pf);
     }

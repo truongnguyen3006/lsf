@@ -18,13 +18,14 @@ import org.springframework.util.StringUtils;
 
 import java.util.HashMap;
 import java.util.Map;
-
+//lắng nghe tin nhắn từ Kafka.
 @AutoConfiguration(before = org.springframework.boot.autoconfigure.kafka.KafkaAutoConfiguration.class)
 @ConditionalOnClass(ConcurrentKafkaListenerContainerFactory.class)
 @EnableConfigurationProperties(KafkaProperties.class)
 public class KafkaConsumerAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean
+    //nạp các cấu hình kết nối
     public ConsumerFactory<String, Object> consumerFactory(KafkaProperties props, SerdeFactory serdeFactory) {
         Map<String, Object> c = new HashMap<>();
         c.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, props.getBootstrapServers());
@@ -35,6 +36,7 @@ public class KafkaConsumerAutoConfiguration {
 
         c.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, props.getConsumer().getMaxPollRecords());
         // Let Spring Kafka manage commits (plays nicely with retries/DLQ)
+        // Tắt auto-commit giúp ứng dụng chủ động kiểm soát việc xác nhận đã đọc tin nhắn
         c.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, false);
         // Reduce "missed" messages when running local demos (fresh group w/o offsets)
         c.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, props.getConsumer().getAutoOffsetReset());
@@ -50,6 +52,7 @@ public class KafkaConsumerAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
+    // Cho phép tạo ra nhiều luồng (threads) để đọc tin nhắn song song dựa trên thông số concurrency
     //“Concurrent” nghĩa là hỗ trợ nhiều consumer thread song song (concurrency).
     public ConcurrentKafkaListenerContainerFactory<String, Object> kafkaListenerContainerFactory(
             KafkaProperties props,
@@ -63,8 +66,8 @@ public class KafkaConsumerAutoConfiguration {
         //concurrency hiệu quả tối đa ≈ số partitions của topic
         // (mỗi partition chỉ có 1 consumer trong group đọc tại một thời điểm).
         f.setConcurrency(props.getConsumer().getConcurrency());
-        //AckMode.RECORD: xử lý xong mỗi record thì commit record đó.
-        //AckMode.BATCH: xử lý xong cả batch thì commit một lần.
+        //AckMode.RECORD: xử lý theo từng dòng xong mỗi record thì commit record đó.
+        //AckMode.BATCH: xử lý theo lô xong cả batch thì commit một lần.
         f.getContainerProperties().setAckMode(
                 props.getConsumer().isBatch() ? ContainerProperties.AckMode.BATCH
                         : ContainerProperties.AckMode.RECORD

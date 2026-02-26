@@ -6,7 +6,9 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import java.time.Duration;
 
 @Data
-//nói với Spring Boot tìm các cấu hình bắt đầu bằng lsf.kafka Và bind (gán) các key con vào field của class này theo tên.
+//nói với Spring Boot tìm các cấu hình bắt đầu bằng lsf.kafka Và bind (gán)
+// vào các biến của class này
+//Định nghĩa sẵn các giá trị mặc định an toàn cho hệ thống lớn
 @ConfigurationProperties(prefix = "lsf.kafka")
 public class KafkaProperties {
     private String bootstrapServers;

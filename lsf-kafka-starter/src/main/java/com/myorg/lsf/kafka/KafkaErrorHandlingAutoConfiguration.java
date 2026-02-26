@@ -37,16 +37,18 @@ import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
-
+//Xử lý các exception xảy ra trong quá trình Consumer đọc tin nhắn.
 @AutoConfiguration(before = org.springframework.boot.autoconfigure.kafka.KafkaAutoConfiguration.class)
 @ConditionalOnClass(DefaultErrorHandler.class)
 @EnableConfigurationProperties(KafkaProperties.class)
 @Slf4j
 public class KafkaErrorHandlingAutoConfiguration {
-
     @Bean
     @ConditionalOnProperty(prefix = "lsf.kafka.dlq", name = "enabled", havingValue = "true")
     @ConditionalOnMissingBean
+    //Khi đã thử lại hết số lần mà vẫn lỗi,
+    // message sẽ được gửi sang một Topic khác gọi là DLQ (Topic gốc thêm hậu tố .DLQ)
+    // để kỹ sư kiểm tra sau.
     public DeadLetterPublishingRecoverer dlqRecover(
             KafkaProperties props,
             ObjectProvider<KafkaTemplate<String, Object>> templateProvider,
@@ -73,8 +75,6 @@ public class KafkaErrorHandlingAutoConfiguration {
 
         return recoverer;
     }
-
-
 
     /**
      * Pre-register the base meters so /actuator/metrics/lsf.kafka.* never returns 404
@@ -105,6 +105,7 @@ public class KafkaErrorHandlingAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
+    //Nếu có lỗi, sẽ thử lại (retry) dựa trên thông số backoff (thời gian chờ và số lần thử).
     public CommonErrorHandler commonErrorHandler(
             KafkaProperties props,
             ObjectProvider<DeadLetterPublishingRecoverer> recovererProvider
@@ -136,9 +137,8 @@ public class KafkaErrorHandlingAutoConfiguration {
         return new DefaultLsfDlqReasonClassifier();
     }
 
-
-
     @Slf4j
+    //Dùng cơ chế Reflection để "bơm" (inject) bộ đếm metrics của Micrometer vào hệ thống lắng nghe lỗi.
     static class DefaultErrorHandlerMetricsPostProcessor implements BeanPostProcessor {
 
         private final String service;
@@ -301,6 +301,7 @@ public class KafkaErrorHandlingAutoConfiguration {
      * We only increment tagged meters; the base meters are pre-registered at 0 to avoid 404.
      */
     @Slf4j
+    //Ghi nhận log và đếm số lần retry/DLQ (metrics) đẩy ra hệ thống giám sát (như Prometheus/Grafana).
     static class LsfKafkaRetryDlqMetricsListener implements RetryListener {
 
         private final String service;
@@ -348,6 +349,8 @@ public class KafkaErrorHandlingAutoConfiguration {
         }
     }
 
+    //Đính kèm các thông tin quan trọng vào header của message lỗi
+    // (lý do lỗi, tên service, thời gian) trước khi ném vào DLQ.
     private static void tryAttachDlqHeadersFunction(
             DeadLetterPublishingRecoverer recoverer,
             String service,

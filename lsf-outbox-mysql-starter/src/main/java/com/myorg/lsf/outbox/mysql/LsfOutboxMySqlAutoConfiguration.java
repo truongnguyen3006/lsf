@@ -68,22 +68,19 @@ public class LsfOutboxMySqlAutoConfiguration {
 
     @Bean
     @ConditionalOnProperty(prefix = "lsf.outbox.publisher", name = "enabled", havingValue = "true")
-    @ConditionalOnBean(KafkaTemplate.class)
-    public OutboxMetrics outboxMetrics(ObjectProvider<MeterRegistry> regProvider,
+    @ConditionalOnProperty(prefix = "lsf.outbox.metrics", name = "enabled", havingValue = "true", matchIfMissing = true)
+    @ConditionalOnBean({KafkaTemplate.class, JdbcOutboxRepository.class, MeterRegistry.class})
+    public OutboxMetrics outboxMetrics(MeterRegistry registry,
                                        JdbcOutboxRepository repo,
-                                       Clock clock,
-                                       LsfOutboxMySqlProperties props) {
-        MeterRegistry reg = regProvider.getIfAvailable();
-        if (reg == null || !props.getMetrics().isEnabled()) return null;
-
-        OutboxMetrics m = new OutboxMetrics(reg, repo, clock);
-        m.preRegister(); // ensure meters exist at boot
+                                       Clock clock) {
+        OutboxMetrics m = new OutboxMetrics(registry, repo, clock);
+        m.preRegister();
         return m;
     }
 
     @Bean
     @ConditionalOnProperty(prefix = "lsf.outbox.publisher", name = "enabled", havingValue = "true")
-    @ConditionalOnBean(KafkaTemplate.class)
+    @ConditionalOnBean({KafkaTemplate.class, JdbcOutboxRepository.class})
     public OutboxPublisher outboxPublisher(LsfOutboxMySqlProperties props,
                                            JdbcOutboxRepository repo,
                                            KafkaTemplate<String, Object> kafkaTemplate,
@@ -100,7 +97,7 @@ public class LsfOutboxMySqlAutoConfiguration {
                 lsfOutboxTxTemplate,
                 lsfOutboxClock,
                 hooks,
-                metricsProvider.getIfAvailable()
+                metricsProvider.getIfAvailable() // nếu metrics bean không tồn tại thì null OK
         );
     }
 

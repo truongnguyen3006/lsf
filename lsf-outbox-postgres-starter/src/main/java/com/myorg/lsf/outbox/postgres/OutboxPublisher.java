@@ -51,8 +51,13 @@ public class OutboxPublisher {
 
         Instant now = clock.instant().truncatedTo(ChronoUnit.MILLIS);
         Instant leaseUntil = now.plus(props.getPublisher().getLease());
-
-        int claimed = tx.execute(st -> repo.claimBatch(instanceId, now, leaseUntil, props.getPublisher().getBatchSize()));
+        int claimed = tx.execute(st -> {
+            var cs = props.getPublisher().getClaimStrategy();
+            if (cs == LsfOutboxPostgresProperties.Publisher.ClaimStrategy.SKIP_LOCKED) {
+                return repo.claimBatchSkipLocked(instanceId, now, leaseUntil, props.getPublisher().getBatchSize());
+            }
+            return repo.claimBatch(instanceId, now, leaseUntil, props.getPublisher().getBatchSize());
+        });
         if (claimed <= 0) return;
 
         List<OutboxRow> rows = repo.findClaimed(instanceId, now, props.getPublisher().getBatchSize());

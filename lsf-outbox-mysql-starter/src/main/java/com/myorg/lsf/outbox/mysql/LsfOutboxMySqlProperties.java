@@ -34,6 +34,15 @@ public class LsfOutboxMySqlProperties {
         private int maxRetries = 10;
         //Kafka send
         private Duration sendTimeout = Duration.ofSeconds(10);
+
+        // inside LsfOutboxMySqlProperties.Publisher
+        public enum ClaimStrategy {
+            LEASE,
+            SKIP_LOCKED
+        }
+
+        private ClaimStrategy claimStrategy = ClaimStrategy.LEASE;
+
     }
 
     @Data

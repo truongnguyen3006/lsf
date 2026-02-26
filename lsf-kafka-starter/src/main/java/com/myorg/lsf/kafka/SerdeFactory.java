@@ -9,14 +9,17 @@ import org.apache.kafka.common.serialization.Serdes;
 
 import java.util.HashMap;
 import java.util.Map;
-
+//Trung tâm sản xuất các bộ mã hoá/giải mã (Serializer/Deserializer) cho Kafka.
 @Data
 public class SerdeFactory {
-    private final String SchemaRegistryUrl;
+    private final String schemaRegistryUrl;
     //Common props for all Confluent schema-aware components
     public Map<String, Object> schemaRegistryProps() {
         Map<String, Object> props = new HashMap<>();
-        props.put(AbstractKafkaSchemaSerDeConfig.SCHEMA_REGISTRY_URL_CONFIG, SchemaRegistryUrl);
+        // AbstractKafkaSchemaSerDeConfig.SCHEMA_REGISTRY_URL_CONFIG là hằng số được cung cấp sẵn
+        //từ thư viện Confluent, giá trị là: "schema.registry.url"
+        // dùng hằng số giúp tránh gõ sai
+        props.put(AbstractKafkaSchemaSerDeConfig.SCHEMA_REGISTRY_URL_CONFIG, schemaRegistryUrl);
         return props;
     }
     //For Spring Kafka ProducerFactory

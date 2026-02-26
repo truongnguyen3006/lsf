@@ -33,6 +33,13 @@ public class LsfOutboxPostgresProperties {
         private int maxRetries = 10;
 
         private Duration sendTimeout = Duration.ofSeconds(10);
+
+        public enum ClaimStrategy {
+            LEASE,
+            SKIP_LOCKED
+        }
+
+        private ClaimStrategy claimStrategy = ClaimStrategy.LEASE;
     }
 
     @Data
