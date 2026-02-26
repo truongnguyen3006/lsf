@@ -9,7 +9,7 @@ import org.springframework.kafka.core.KafkaAdmin;
 
 import java.util.HashMap;
 import java.util.Map;
-
+//kích hoạt các file cấu hình khác và cung cấp các Bean cơ bản nhất.
 //Spring Boot sẽ tự động import nó vào ApplicationContext khi starter có mặt trên classpath.
 @AutoConfiguration
 //tạo bean LsfKafkaProperties và bind các giá trị từ application.yml theo prefix lsf.kafka vào nó.

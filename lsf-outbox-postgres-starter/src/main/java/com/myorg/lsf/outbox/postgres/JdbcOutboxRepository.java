@@ -5,7 +5,9 @@ import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @RequiredArgsConstructor
 public class JdbcOutboxRepository {
@@ -119,5 +121,45 @@ public class JdbcOutboxRepository {
                 """.formatted(t());
         Integer v = jdbc.queryForObject(sql, Integer.class, Timestamp.from(now));
         return v == null ? 0 : v;
+    }
+
+    public int claimBatchSkipLocked(String owner, Instant now, Instant leaseUntil, int limit) {
+        // Must run inside a transaction
+        String selectSql = """
+            SELECT id
+            FROM %s
+            WHERE (
+                status='NEW'
+                OR (status='RETRY' AND (next_attempt_at IS NULL OR next_attempt_at <= ?))
+                OR (status='PROCESSING' AND lease_until IS NOT NULL AND lease_until < ?)
+            )
+            ORDER BY id
+            LIMIT ?
+            FOR UPDATE SKIP LOCKED
+            """.formatted(t());
+
+        List<Long> ids = jdbc.queryForList(
+                selectSql,
+                Long.class,
+                Timestamp.from(now),
+                Timestamp.from(now),
+                limit
+        );
+
+        if (ids.isEmpty()) return 0;
+
+        String placeholders = ids.stream().map(x -> "?").collect(Collectors.joining(","));
+        String updateSql = """
+            UPDATE %s
+            SET status='PROCESSING', lease_owner=?, lease_until=?
+            WHERE id IN (%s)
+            """.formatted(t(), placeholders);
+
+        ArrayList<Object> args = new ArrayList<>();
+        args.add(owner);
+        args.add(Timestamp.from(leaseUntil));
+        args.addAll(ids);
+
+        return jdbc.update(updateSql, args.toArray());
     }
 }

@@ -70,16 +70,11 @@ public class LsfOutboxPostgresAutoConfiguration {
 
     @Bean
     @ConditionalOnProperty(prefix = "lsf.outbox.publisher", name = "enabled", havingValue = "true")
+    @ConditionalOnProperty(prefix = "lsf.outbox.metrics", name = "enabled", havingValue = "true", matchIfMissing = true)
     @ConditionalOnBean({ KafkaTemplate.class, JdbcOutboxRepository.class, MeterRegistry.class })
     public OutboxMetrics outboxMetrics(MeterRegistry registry,
                                        JdbcOutboxRepository repo,
-                                       Clock clock,
-                                       LsfOutboxPostgresProperties props) {
-
-        if (!props.getMetrics().isEnabled()) {
-            // metrics disabled -> don't create bean
-            return null; // (hoặc bỏ bean hẳn bằng thêm condition property)
-        }
+                                       Clock clock) {
 
         OutboxMetrics m = new OutboxMetrics(registry, repo, clock);
         m.preRegister();

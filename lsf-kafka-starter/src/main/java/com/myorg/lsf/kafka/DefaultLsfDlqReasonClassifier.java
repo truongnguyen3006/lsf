@@ -5,7 +5,10 @@ import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.errors.SerializationException;
 import org.springframework.core.NestedExceptionUtils;
 import org.springframework.kafka.support.serializer.DeserializationException;
-
+//nếu lỗi do không thể đọc định dạng (Serialization/Deserialization)
+// thì không cần retry (vì có thử lại tỷ lần dữ liệu vẫn sai định dạng), đưa thẳng vào DLQ.
+// Nếu lỗi do Framework định nghĩa (LsfNonRetryableException),
+// cũng đưa vào DLQ. Các lỗi khác thì báo hết số lần retry.
 public class DefaultLsfDlqReasonClassifier implements LsfDlqReasonClassifier {
 
     @Override

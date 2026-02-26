@@ -12,6 +12,7 @@ lsf:
     enabled: true
     publisher:
       enabled: true
+      claim-strategy: SKIP_LOCKED
       poll-interval: 1s
       initial-delay: 1s
       batch-size: 50

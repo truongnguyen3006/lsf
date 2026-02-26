@@ -1,5 +1,5 @@
 package com.myorg.lsf.kafka;
-
+//Khai báo các hằng số (constants) và Enum để chuẩn hoá các thẻ (tags) đính kèm vào message khi gửi vào DLQ.
 public enum LsfDlqReason {
     RETRY_EXHAUSTED("RETRY_EXHAUSTED"),
     DESERIALIZATION("DESERIALIZATION"),

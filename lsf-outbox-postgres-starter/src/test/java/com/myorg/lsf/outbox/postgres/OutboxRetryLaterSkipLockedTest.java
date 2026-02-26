@@ -1,4 +1,4 @@
-package com.myorg.lsf.outbox.mysql;
+package com.myorg.lsf.outbox.postgres;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.myorg.lsf.contracts.core.envelope.EventEnvelope;
@@ -6,16 +6,18 @@ import com.myorg.lsf.outbox.OutboxWriter;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.producer.ProducerConfig;
+import org.apache.kafka.common.serialization.StringDeserializer;
 import org.apache.kafka.common.serialization.StringSerializer;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
-import org.springframework.kafka.core.ConsumerFactory;
 import org.springframework.kafka.core.DefaultKafkaProducerFactory;
 import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.kafka.core.ConsumerFactory;
+import org.springframework.kafka.core.DefaultKafkaConsumerFactory;
+import org.springframework.kafka.support.serializer.JsonDeserializer;
 import org.springframework.kafka.support.serializer.JsonSerializer;
 import org.springframework.kafka.test.EmbeddedKafkaBroker;
 import org.springframework.kafka.test.context.EmbeddedKafka;
@@ -23,13 +25,14 @@ import org.springframework.kafka.test.utils.KafkaTestUtils;
 
 import java.time.Duration;
 import java.util.Map;
+import java.util.HashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 @EmbeddedKafka(partitions = 1, topics = {OutboxRetryLaterTest.TOPIC})
 @SpringBootTest(
-        classes = {OutboxPublisherITApp.class, OutboxRetryLaterTest.HooksConfig.class},
+        classes = {OutboxPublisherITApp.class, OutboxRetryLaterSkipLockedTest.HooksConfig.class},
         properties = {
                 "lsf.outbox.enabled=true",
                 "lsf.outbox.publisher.enabled=true",
@@ -41,23 +44,12 @@ import static org.junit.jupiter.api.Assertions.*;
                 "lsf.outbox.publisher.max-retries=5",
                 "lsf.outbox.publisher.send-timeout=5s",
 
-                "spring.datasource.url=jdbc:h2:mem:outbox_it2;MODE=MySQL;DATABASE_TO_UPPER=false;DB_CLOSE_DELAY=-1",
-                "spring.datasource.username=sa",
-                "spring.datasource.password=",
-                "spring.flyway.enabled=true",
-
                 "spring.kafka.bootstrap-servers=${spring.embedded.kafka.brokers}",
-                "spring.kafka.producer.key-serializer=org.apache.kafka.common.serialization.StringSerializer",
-                "spring.kafka.producer.value-serializer=org.springframework.kafka.support.serializer.JsonSerializer",
-                "spring.kafka.consumer.key-deserializer=org.apache.kafka.common.serialization.StringDeserializer",
-                "spring.kafka.consumer.value-deserializer=org.springframework.kafka.support.serializer.JsonDeserializer",
-                "spring.kafka.consumer.properties.spring.json.trusted.packages=*",
-                "spring.kafka.consumer.properties.spring.json.value.default.type=com.myorg.lsf.contracts.core.envelope.EventEnvelope",
-                "spring.kafka.consumer.auto-offset-reset=earliest"
+                "spring.kafka.consumer.auto-offset-reset=earliest",
+                "lsf.outbox.publisher.claim-strategy=SKIP_LOCKED"
         }
 )
-
-class OutboxRetryLaterTest {
+class OutboxRetryLaterSkipLockedTest extends PostgresContainerBase {
 
     static final String TOPIC = "demo-topic";
 
@@ -69,7 +61,7 @@ class OutboxRetryLaterTest {
     @Autowired ObjectMapper mapper;
 
     @Test
-    void publishFail_thenRetryLater_shouldPublishOk() {
+    void publishFail_thenRetryLater_shouldPublishOk() throws Exception {
         String eventId = "E_RETRY_" + java.util.UUID.randomUUID();
 
         EventEnvelope env = EventEnvelope.builder()
@@ -83,23 +75,23 @@ class OutboxRetryLaterTest {
 
         writer.append(env, TOPIC, "k1");
 
-        // 1st run fails before send (hook throws) -> mark RETRY
+        // 1st run: fail -> RETRY
         publisher.runOnce();
         assertEquals("RETRY", repo.statusByEventId(eventId));
 
-        // wait backoff
-        try { Thread.sleep(150); } catch (InterruptedException ignored) {}
+        Thread.sleep(150);
 
-        // 2nd run should publish and mark SENT
+        // 2nd run: publish ok -> SENT
         publisher.runOnce();
+        assertEquals("SENT", repo.statusByEventId(eventId));
 
         Consumer<String, EventEnvelope> c = consumerFactory.createConsumer("it2", "it2");
         c.subscribe(java.util.List.of(TOPIC));
         ConsumerRecord<String, EventEnvelope> rec =
                 KafkaTestUtils.getSingleRecord(c, TOPIC, Duration.ofSeconds(5));
+
         assertNotNull(rec.value());
         assertEquals(eventId, rec.value().getEventId());
-        assertEquals("SENT", repo.statusByEventId(eventId));
         c.close();
     }
 
@@ -119,25 +111,29 @@ class OutboxRetryLaterTest {
             };
         }
 
-        @SuppressWarnings("SpringJavaInjectionPointsAutowiringInspection")
         @Bean
-        ConsumerFactory<String, EventEnvelope> consumerFactory(EmbeddedKafkaBroker broker) {
-            Map<String, Object> props = KafkaTestUtils.consumerProps("it-g2", "false", broker);
-            props.put("key.deserializer", "org.apache.kafka.common.serialization.StringDeserializer");
-            props.put("value.deserializer", "org.springframework.kafka.support.serializer.JsonDeserializer");
-            props.put("spring.json.trusted.packages", "*");
-            props.put("spring.json.value.default.type", "com.myorg.lsf.contracts.core.envelope.EventEnvelope");
-            props.put("auto.offset.reset", "earliest");
-            return new org.springframework.kafka.core.DefaultKafkaConsumerFactory<>(props);
-        }
-
-        @Bean
-        KafkaTemplate<String, Object> kafkaTemplate(@Value("${spring.embedded.kafka.brokers}") String brokers) {
-            Map<String, Object> props = new java.util.HashMap<>();
-            props.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, brokers);
+        KafkaTemplate<String, Object> kafkaTemplate(EmbeddedKafkaBroker broker) {
+            Map<String, Object> props = KafkaTestUtils.producerProps(broker);
             props.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
             props.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, JsonSerializer.class);
             return new KafkaTemplate<>(new DefaultKafkaProducerFactory<>(props));
         }
+
+        @Bean
+        ConsumerFactory<String, EventEnvelope> consumerFactory(EmbeddedKafkaBroker broker) {
+            Map<String, Object> props = KafkaTestUtils.consumerProps("it-g2", "false", broker);
+            props.put("key.deserializer", StringDeserializer.class);
+            props.put("value.deserializer", JsonDeserializer.class);
+            props.put(JsonDeserializer.TRUSTED_PACKAGES, "*");
+            props.put(JsonDeserializer.VALUE_DEFAULT_TYPE, "com.myorg.lsf.contracts.core.envelope.EventEnvelope");
+            props.put("auto.offset.reset", "earliest");
+            return new DefaultKafkaConsumerFactory<>(new HashMap<>(props));
+        }
+    }
+    @Autowired org.springframework.jdbc.core.JdbcTemplate jdbc;
+
+    @org.junit.jupiter.api.BeforeEach
+    void clean() {
+        jdbc.update("TRUNCATE TABLE lsf_outbox");
     }
 }

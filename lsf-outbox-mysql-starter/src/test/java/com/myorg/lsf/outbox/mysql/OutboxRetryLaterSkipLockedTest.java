@@ -29,7 +29,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 @EmbeddedKafka(partitions = 1, topics = {OutboxRetryLaterTest.TOPIC})
 @SpringBootTest(
-        classes = {OutboxPublisherITApp.class, OutboxRetryLaterTest.HooksConfig.class},
+        classes = {OutboxPublisherITApp.class, OutboxRetryLaterSkipLockedTest.HooksConfig.class},
         properties = {
                 "lsf.outbox.enabled=true",
                 "lsf.outbox.publisher.enabled=true",
@@ -41,10 +41,6 @@ import static org.junit.jupiter.api.Assertions.*;
                 "lsf.outbox.publisher.max-retries=5",
                 "lsf.outbox.publisher.send-timeout=5s",
 
-                "spring.datasource.url=jdbc:h2:mem:outbox_it2;MODE=MySQL;DATABASE_TO_UPPER=false;DB_CLOSE_DELAY=-1",
-                "spring.datasource.username=sa",
-                "spring.datasource.password=",
-                "spring.flyway.enabled=true",
 
                 "spring.kafka.bootstrap-servers=${spring.embedded.kafka.brokers}",
                 "spring.kafka.producer.key-serializer=org.apache.kafka.common.serialization.StringSerializer",
@@ -53,11 +49,13 @@ import static org.junit.jupiter.api.Assertions.*;
                 "spring.kafka.consumer.value-deserializer=org.springframework.kafka.support.serializer.JsonDeserializer",
                 "spring.kafka.consumer.properties.spring.json.trusted.packages=*",
                 "spring.kafka.consumer.properties.spring.json.value.default.type=com.myorg.lsf.contracts.core.envelope.EventEnvelope",
-                "spring.kafka.consumer.auto-offset-reset=earliest"
+                "spring.kafka.consumer.auto-offset-reset=earliest",
+
+                "lsf.outbox.publisher.claim-strategy=SKIP_LOCKED",
         }
 )
 
-class OutboxRetryLaterTest {
+class OutboxRetryLaterSkipLockedTest extends MySqlContainerBase {
 
     static final String TOPIC = "demo-topic";
 
