@@ -8,7 +8,9 @@ import org.springframework.context.ApplicationListener;
 import org.springframework.context.ApplicationContext;
 import org.springframework.core.env.Environment;
 import org.springframework.util.ClassUtils;
-
+//Một bảo vệ lúc khởi động. Nếu cấu hình chạy Production mà cấu hình store=auto
+// nhưng quên cài Redis, nó sẽ ném lỗi cấm ứng dụng khởi động (throw new IllegalStateException)
+// để tránh thảm hoạ luỹ đẳng.
 @Slf4j
 @RequiredArgsConstructor
 public class IdempotencyGuard implements ApplicationListener<ApplicationReadyEvent> {

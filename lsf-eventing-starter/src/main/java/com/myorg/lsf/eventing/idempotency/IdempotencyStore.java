@@ -1,14 +1,6 @@
 package com.myorg.lsf.eventing.idempotency;
 
-/**
- * Idempotency store used by {@code IdempotentLsfDispatcher}.
- *
- * <p>For correct cross-instance deduplication, operations must be atomic where required.
- *
- * <p><b>Important for large-scale:</b> the effective key should be namespaced (e.g. by consumer group),
- * otherwise multiple consumer groups sharing the same Redis may deduplicate each other incorrectly.
- * A common approach is to bake groupId into the store's keyPrefix.
- */
+//Hợp đồng định nghĩa cách thức lưu trữ trạng thái xử lý của một eventId
 public interface IdempotencyStore extends AutoCloseable {
 
     enum Decision {
@@ -42,7 +34,7 @@ public interface IdempotencyStore extends AutoCloseable {
         return true;
     }
 
-    // --- New API (recommended) ---
+    // --- New API---
 
     default Lease tryBeginProcessing(String eventId) {
         // Fallback to legacy behaviour: mark immediately.

@@ -1,9 +1,7 @@
 package com.myorg.lsf.eventing.context;
-
-/**
- * Thread-local marker used by inner dispatcher wrappers (idempotency) to communicate
- * non-standard outcomes (duplicate / in-flight) to outer layers (observability).
- */
+//Dùng ThreadLocal để truyền thông tin trạng thái xử lý (DUPLICATE, IN_FLIGHT)
+// từ bên trong lõi ra ngoài lớp bao bọc
+// mà không làm thay đổi chữ ký hàm (method signature).
 public final class LsfDispatchOutcome {
 
     public static final String DUPLICATE = "duplicate";

@@ -10,7 +10,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-
+//Lưu trạng thái vào RAM (ConcurrentHashMap) dùng cho môi trường dev hoặc app chỉ có 1 instance.
+// Có thread chạy ngầm (cleaner) tự động dọn dẹp bộ nhớ chống tràn RAM.
 @Slf4j
 public class InMemoryIdempotencyStore implements IdempotencyStore, AutoCloseable {
 

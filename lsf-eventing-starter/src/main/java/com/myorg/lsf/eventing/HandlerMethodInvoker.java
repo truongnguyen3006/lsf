@@ -9,6 +9,9 @@ import java.lang.reflect.Method;
 
 @Data
 @AllArgsConstructor
+//Sử dụng Java Reflection để gọi hàm của developer.hỗ trợ cả 2 kiểu viết hàm:
+// chỉ nhận payload (1 tham số) hoặc
+// nhận cả vỏ bọc EventEnvelope lẫn payload (2 tham số).
 public class HandlerMethodInvoker {
     private final Object target;
     private final Method method;

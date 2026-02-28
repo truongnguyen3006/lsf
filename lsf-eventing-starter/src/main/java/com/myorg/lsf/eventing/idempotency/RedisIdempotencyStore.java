@@ -6,7 +6,10 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 
 import java.time.Duration;
 import java.util.List;
-
+//Dành cho môi trường Production (nhiều instance chạy song song)
+//Sử dụng Lua Scripts của Redis thông qua DefaultRedisScript
+// để gộp nhiều thao tác (GET, SETNX, COMPARE) thành một khối nguyên tử (Atomic),
+// ngăn chặn tuyệt đối lỗi Race Condition khi 2 instance nhận cùng 1 message tại cùng 1 micro-giây.
 @RequiredArgsConstructor
 public class RedisIdempotencyStore implements IdempotencyStore {
 
