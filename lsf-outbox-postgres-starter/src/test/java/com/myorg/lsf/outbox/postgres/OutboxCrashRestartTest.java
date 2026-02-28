@@ -64,7 +64,7 @@ class OutboxCrashRestartTest extends PostgresContainerBase  {
 
     @Test
     void crashAfterClaim_thenRestart_shouldStillPublish() throws Exception {
-        String eventId = "E_CRASH_1";
+        String eventId = "E_CRASH_" + java.util.UUID.randomUUID();
 
         EventEnvelope env = EventEnvelope.builder()
                 .eventId(eventId)

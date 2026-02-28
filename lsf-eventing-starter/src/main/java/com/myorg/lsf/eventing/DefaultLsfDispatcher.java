@@ -6,7 +6,8 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import org.slf4j.LoggerFactory;
 import org.slf4j.Logger;
-
+//Cài đặt mặc định của bộ điều phối. Đọc eventType từ vỏ bọc, tra cứu trong danh bạ HandlerRegistry,
+// nếu tìm thấy thì yêu cầu HandlerMethodInvoker kích hoạt hàm xử lý nghiệp vụ.
 @Data
 @AllArgsConstructor
 public class DefaultLsfDispatcher implements LsfDispatcher {

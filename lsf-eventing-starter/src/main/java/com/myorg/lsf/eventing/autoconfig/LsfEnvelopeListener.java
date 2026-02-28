@@ -10,7 +10,8 @@ import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.springframework.kafka.annotation.KafkaListener;
 
 import java.util.List;
-
+//Lắng nghe trực tiếp từ Kafka bằng @KafkaListener.
+// Nhận dữ liệu thô, ép kiểu, rồi đẩy sang cho LsfDispatcher
 @RequiredArgsConstructor
 public class LsfEnvelopeListener {
 

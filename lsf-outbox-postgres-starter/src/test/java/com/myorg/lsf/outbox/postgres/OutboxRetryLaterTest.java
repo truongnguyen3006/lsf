@@ -61,7 +61,7 @@ class OutboxRetryLaterTest extends PostgresContainerBase {
 
     @Test
     void publishFail_thenRetryLater_shouldPublishOk() throws Exception {
-        String eventId = "E_RETRY_1";
+        String eventId = "E_RETRY_" + java.util.UUID.randomUUID();
 
         EventEnvelope env = EventEnvelope.builder()
                 .eventId(eventId)

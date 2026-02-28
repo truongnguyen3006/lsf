@@ -5,7 +5,11 @@ import com.myorg.lsf.eventing.context.LsfDispatchOutcome;
 import com.myorg.lsf.eventing.idempotency.IdempotencyStore;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-
+//Sử dụng Design Pattern "Decorator". Nó bọc bên ngoài DefaultLsfDispatcher.
+// Nhận message -> Hỏi Store xem eventId này đã xử lý chưa -> Trùng thì vứt đi,
+// Đang xử lý thì bỏ qua,
+// Chưa xử lý thì ghi nhận trạng thái
+// và cho phép DefaultLsfDispatcher chạy tiếp.
 @Slf4j
 @RequiredArgsConstructor
 public class IdempotentLsfDispatcher implements LsfDispatcher {

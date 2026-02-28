@@ -7,7 +7,8 @@ import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.springframework.kafka.support.KafkaNull;
 
 import java.util.Map;
-
+//cố gắng convert mọi dạng dữ liệu (JsonNode, Map, String)
+// thành EventEnvelope chuẩn để hệ thống có thể đọc hiểu.
 public class JacksonPayloadConverter implements PayloadConverter {
 
     private final ObjectMapper mapper;
