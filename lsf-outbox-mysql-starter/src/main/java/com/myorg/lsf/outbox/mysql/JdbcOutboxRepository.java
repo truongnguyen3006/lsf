@@ -1,5 +1,6 @@
 package com.myorg.lsf.outbox.mysql;
 
+import com.myorg.lsf.outbox.sql.OutboxSql;
 import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.JdbcTemplate;
 
@@ -13,8 +14,8 @@ import java.util.stream.Collectors;
 public class JdbcOutboxRepository {
     private final JdbcTemplate jdbc;
     private final LsfOutboxMySqlProperties props;
-    private String t(){
-        return props.getTable();
+    private String t() {
+        return OutboxSql.validateTableName(props.getTable());
     }
 
     public int claimBatch(String owner, Instant now, Instant leaseUntil, int limit){

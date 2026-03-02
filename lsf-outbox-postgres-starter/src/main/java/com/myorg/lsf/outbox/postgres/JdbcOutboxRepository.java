@@ -1,5 +1,6 @@
 package com.myorg.lsf.outbox.postgres;
 
+import com.myorg.lsf.outbox.sql.OutboxSql;
 import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.JdbcTemplate;
 
@@ -15,7 +16,9 @@ public class JdbcOutboxRepository {
     private final JdbcTemplate jdbc;
     private final LsfOutboxPostgresProperties props;
 
-    private String t() { return props.getTable(); }
+    private String t() {
+        return OutboxSql.validateTableName(props.getTable());
+    }
 
     public int claimBatch(String owner, Instant now, Instant leaseUntil, int limit) {
         String sql = """

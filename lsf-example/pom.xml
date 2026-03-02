@@ -18,6 +18,7 @@
     </properties>
 
     <dependencies>
+
         <dependency>
             <groupId>com.myorg.lsf</groupId>
             <artifactId>lsf-kafka-starter</artifactId>
@@ -36,6 +37,11 @@
         <dependency>
             <groupId>com.myorg.lsf</groupId>
             <artifactId>lsf-contracts</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.myorg.lsf</groupId>
+            <artifactId>lsf-observability-starter</artifactId>
             <version>${project.version}</version>
         </dependency>
         <dependency>
@@ -115,7 +121,27 @@
             <artifactId>mysql</artifactId>
             <scope>test</scope>
         </dependency>
+        <!-- Tracing (Micrometer -> Brave) + report to Zipkin (Boot 3.x) -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-tracing-bridge-brave</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.zipkin.reporter2</groupId>
+            <artifactId>zipkin-reporter-brave</artifactId>
+        </dependency>
 
+        <dependency>
+            <groupId>com.myorg.lsf</groupId>
+            <artifactId>lsf-quota-streams-starter</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
+        <!-- nếu lsf-example chưa có redis -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
     </dependencies>
     <build>
         <testSourceDirectory>${project.basedir}/src/test/java</testSourceDirectory>

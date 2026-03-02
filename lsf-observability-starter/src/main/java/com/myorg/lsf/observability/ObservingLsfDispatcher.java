@@ -4,6 +4,8 @@ import com.myorg.lsf.contracts.core.envelope.EventEnvelope;
 import com.myorg.lsf.eventing.LsfDispatcher;
 import com.myorg.lsf.eventing.context.LsfDispatchOutcome;
 import io.micrometer.core.instrument.Timer;
+import io.micrometer.observation.Observation;
+import io.micrometer.observation.ObservationRegistry;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.MDC;
 
@@ -13,11 +15,25 @@ public class ObservingLsfDispatcher implements LsfDispatcher {
     private final LsfDispatcher delegate;
     private final LsfObservabilityProperties props;
     private final LsfMetrics metrics; // can be null if metrics disabled
+    private final ObservationRegistry observationRegistry; // nullable
 
     @Override
     public void dispatch(EventEnvelope env) {
         if (props.isMdcEnabled()) {
             putMdc(env);
+        }
+
+        Observation obs = null;
+        Observation.Scope scope = null;
+
+        if (props.isTracingEnabled() && observationRegistry != null) {
+            obs = Observation.start("lsf.event.dispatch", observationRegistry);
+
+            // low-cardinality tags
+            if (props.isTagEventType() && env != null && env.getEventType() != null) {
+                obs.lowCardinalityKeyValue("event.type", env.getEventType());
+            }
+            scope = obs.openScope();
         }
 
         Timer.Sample sample = (metrics != null && props.isMetricsEnabled())
@@ -27,32 +43,41 @@ public class ObservingLsfDispatcher implements LsfDispatcher {
         try {
             delegate.dispatch(env);
 
-            if (metrics != null && props.isMetricsEnabled()) {
-                String outcome = LsfDispatchOutcome.consume();
-                if (outcome == null) outcome = "success";
+            String outcome = LsfDispatchOutcome.consume();
+            if (outcome == null) outcome = "success";
 
+            if (obs != null) {
+                if (props.isTagOutcome()) obs.lowCardinalityKeyValue("outcome", outcome);
+            }
+
+            if (metrics != null && props.isMetricsEnabled()) {
                 switch (outcome) {
                     case LsfDispatchOutcome.DUPLICATE -> metrics.incDuplicate();
                     case LsfDispatchOutcome.IN_FLIGHT -> metrics.incInFlight();
                     default -> metrics.incHandledSuccess();
                 }
-
                 metrics.stopTimer(sample, env, outcome);
             }
+
+            if (obs != null) obs.stop();
         } catch (RuntimeException e) {
+            if (obs != null) {
+                obs.error(e);
+                obs.lowCardinalityKeyValue("outcome", "fail");
+                obs.stop();
+            }
             if (metrics != null && props.isMetricsEnabled()) {
                 metrics.incHandledFail();
                 metrics.stopTimer(sample, env, "fail");
             }
             throw e;
         } finally {
-            // safety net
             LsfDispatchOutcome.clear();
-            if (props.isMdcEnabled()) {
-                clearMdc();
-            }
+            if (scope != null) scope.close();
+            if (props.isMdcEnabled()) clearMdc();
         }
     }
+
 
     private void putMdc(EventEnvelope env) {
         if (env == null) return;
