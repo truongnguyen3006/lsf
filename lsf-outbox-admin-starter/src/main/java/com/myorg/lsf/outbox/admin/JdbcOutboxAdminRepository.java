@@ -1,5 +1,6 @@
 package com.myorg.lsf.outbox.admin;
 
+import com.myorg.lsf.outbox.sql.OutboxSql;
 import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
@@ -17,6 +18,9 @@ public class JdbcOutboxAdminRepository {
     private final NamedParameterJdbcTemplate named;
     private final JdbcTemplate jdbc;
     private final String table;
+    private String t() {
+        return OutboxSql.validateTableName(table);
+    }
 
     public List<OutboxAdminRow> list(List<OutboxStatus> statuses, int limit, int offset) {
         String sql = """
@@ -27,7 +31,7 @@ public class JdbcOutboxAdminRepository {
                 WHERE (:statusesEmpty = true OR status IN (:statuses))
                 ORDER BY id DESC
                 LIMIT :limit OFFSET :offset
-                """.formatted(table);
+                """.formatted(t());
 
         boolean empty = (statuses == null || statuses.isEmpty());
         MapSqlParameterSource p = new MapSqlParameterSource()
@@ -60,7 +64,7 @@ public class JdbcOutboxAdminRepository {
                        lease_owner, lease_until, next_attempt_at
                 FROM %s
                 WHERE event_id = ?
-                """.formatted(table);
+                """.formatted(t());
 
         List<OutboxAdminRow> rows = jdbc.query(sql, (rs, i) -> new OutboxAdminRow(
                 rs.getLong("id"),
@@ -96,7 +100,7 @@ public class JdbcOutboxAdminRepository {
                     last_error = NULL,
                     retry_count = CASE WHEN :resetRetry THEN 0 ELSE retry_count END
                 WHERE event_id = :eventId
-                """.formatted(table);
+                """.formatted(t());
 
         MapSqlParameterSource p = new MapSqlParameterSource()
                 .addValue("status", mode.name())
@@ -115,7 +119,7 @@ public class JdbcOutboxAdminRepository {
                 WHERE status = 'FAILED'
                 ORDER BY id
                 LIMIT :limit
-                """.formatted(table);
+                """.formatted(t());
 
         List<Long> ids = named.queryForList(select, Map.of("limit", limit), Long.class);
         if (ids.isEmpty()) return 0;
@@ -129,7 +133,7 @@ public class JdbcOutboxAdminRepository {
                     last_error = NULL,
                     retry_count = CASE WHEN :resetRetry THEN 0 ELSE retry_count END
                 WHERE id IN (:ids)
-                """.formatted(table);
+                """.formatted(t());
 
         return named.update(update, Map.of(
                 "ids", ids,
@@ -146,13 +150,13 @@ public class JdbcOutboxAdminRepository {
                     lease_owner = NULL,
                     lease_until = NULL
                 WHERE event_id = :eventId
-                """.formatted(table);
+                """.formatted(t());
 
         return named.update(sql, Map.of("eventId", eventId, "error", safeErr(error)));
     }
 
     public int deleteByEventId(String eventId) {
-        String sql = "DELETE FROM %s WHERE event_id = ?".formatted(table);
+        String sql = "DELETE FROM %s WHERE event_id = ?".formatted(t());
         return jdbc.update(sql, eventId);
     }
 

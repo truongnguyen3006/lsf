@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.myorg.lsf.contracts.core.envelope.EventEnvelope;
 import com.myorg.lsf.outbox.OutboxWriter;
+import com.myorg.lsf.outbox.sql.OutboxSql;
 import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.JdbcTemplate;
 
@@ -14,7 +15,9 @@ public class JdbcOutboxWriter implements OutboxWriter {
     private final ObjectMapper mapper;
     private final LsfOutboxPostgresProperties props;
 
-    private String t() { return props.getTable(); }
+    private String t() {
+        return OutboxSql.validateTableName(props.getTable());
+    }
 
     @Override
     public long append(EventEnvelope envelope, String topic, String key) {

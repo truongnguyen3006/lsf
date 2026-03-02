@@ -15,6 +15,7 @@ public class KafkaProperties {
     private String schemaRegistryUrl;
     private final Producer producer = new Producer();
     private final Consumer consumer = new Consumer();
+    private final Observability observability = new Observability();
     private final Dlq dlq = new Dlq();
     @Data
     public static class Producer {
@@ -29,10 +30,6 @@ public class KafkaProperties {
     @Data
     public static class Consumer {
         private String groupId;
-        /**
-         * Kafka consumer auto.offset.reset (earliest/latest/none).
-         * Default "earliest" for less flaky local testing.
-         */
         private String autoOffsetReset = "earliest";
         private boolean batch = true;
         private int concurrency = 10;
@@ -48,6 +45,11 @@ public class KafkaProperties {
     public static class Dlq{
         private boolean enabled = true;
         private String suffix = ".DLQ";
+    }
+    @Data
+    public static class Observability {
+        private boolean observationEnabled = true;
+        private boolean warnOnBatch = true;
     }
 }
 

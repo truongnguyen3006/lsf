@@ -8,7 +8,6 @@ spring:
   profiles:
     default: outbox-mysql
 
-
 lsf:
   kafka:
     bootstrap-servers: "localhost:9092"
@@ -24,7 +23,9 @@ lsf:
     dlq:
       enabled: true
       suffix: ".DLQ"
-
+  observability:
+    enabled: true
+    tracing-enabled: true
   eventing:
     consume-topics:
       - demo-topic
@@ -39,18 +40,31 @@ lsf:
       redis:
         enabled: true
         key-prefix: "lsf:idemp:"
+  quota:
+    enabled: true
+    store: redis
+    key-prefix: "lsf:quota:"
+    default-hold-seconds: 30
+    keep-alive-seconds: 86400
+    allow-release-confirmed: false
 
 logging:
   pattern:
-    console: "%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX} %-5level ${spring.application.name:-app} [%thread] %logger{36} - corrId=%X{corrId} eventId=%X{eventId} eventType=%X{eventType} producer=%X{producer} topic=%X{topic} partition=%X{partition} offset=%X{offset} - %msg%n%ex{full}"
-
+    console: "%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX} %-5level ${spring.application.name:-app} [%thread] %logger{36} - traceId=%X{traceId:-} spanId=%X{spanId:-} corrId=%X{corrId:-} eventId=%X{eventId:-} eventType=%X{eventType:-} - %msg%n%ex{full}"
 management:
   endpoints:
     web:
       exposure:
         include: health,info,metrics
+  tracing:
+    sampling:
+      probability: 1.0
+    zipkin:
+      tracing:
+        endpoint: http://localhost:9411/api/v2/spans
 server:
   error:
     include-message: always
     include-binding-errors: always
+  port: 8080
 

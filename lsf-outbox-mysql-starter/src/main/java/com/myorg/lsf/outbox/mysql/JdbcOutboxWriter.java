@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.myorg.lsf.contracts.core.envelope.EventEnvelope;
 import com.myorg.lsf.outbox.OutboxWriter;
+import com.myorg.lsf.outbox.sql.OutboxSql;
 import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
@@ -17,6 +18,9 @@ public class JdbcOutboxWriter implements OutboxWriter {
     private final JdbcTemplate jdbc;
     private final ObjectMapper mapper;
     private final LsfOutboxMySqlProperties props;
+    private String t() {
+        return OutboxSql.validateTableName(props.getTable());
+    }
 
     @Override
     public long append(EventEnvelope envelope, String topic, String key) {
@@ -25,7 +29,7 @@ public class JdbcOutboxWriter implements OutboxWriter {
 
         String envelopeJson = toJson(envelope);
 
-        String sql = "INSERT INTO " + props.getTable() +
+        String sql = "INSERT INTO " + t() +
                 " (topic, msg_key, event_id, event_type, correlation_id, aggregate_id, envelope_json)" +
                 " VALUES (?, ?, ?, ?, ?, ?, ?)";
 
@@ -53,7 +57,7 @@ public class JdbcOutboxWriter implements OutboxWriter {
             if (id instanceof Number n) return n.longValue();
         }
 
-        throw new IllegalStateException("No generated key 'id' returned from insert into " + props.getTable());
+        throw new IllegalStateException("No generated key 'id' returned from insert into " + t());
     }
 
 

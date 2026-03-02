@@ -11,6 +11,7 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.SmartLifecycle;
 import org.springframework.context.annotation.Bean;
 import org.springframework.core.env.Environment;
+import io.micrometer.observation.ObservationRegistry;
 
 @AutoConfiguration
 @ConditionalOnClass(LsfDispatcher.class)
@@ -55,7 +56,8 @@ public class LsfObservabilityAutoConfiguration {
     @Bean
     public static BeanPostProcessor observingDispatcherBpp(
             LsfObservabilityProperties props,
-            ObjectProvider<LsfMetrics> metricsProvider
+            ObjectProvider<LsfMetrics> metricsProvider,
+            ObjectProvider<ObservationRegistry> observationRegistryProvider
     ) {
         return new BeanPostProcessor() {
             @Override
@@ -65,7 +67,8 @@ public class LsfObservabilityAutoConfiguration {
                 if (bean instanceof ObservingLsfDispatcher) return bean;
 
                 LsfMetrics metrics = metricsProvider.getIfAvailable();
-                return new ObservingLsfDispatcher((LsfDispatcher) bean, props, metrics);
+                ObservationRegistry registry = observationRegistryProvider.getIfAvailable();
+                return new ObservingLsfDispatcher((LsfDispatcher) bean, props, metrics, registry);
             }
         };
     }

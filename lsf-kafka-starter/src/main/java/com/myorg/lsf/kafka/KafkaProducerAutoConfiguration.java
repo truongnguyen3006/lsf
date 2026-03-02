@@ -2,6 +2,7 @@ package com.myorg.lsf.kafka;
 
 
 import io.confluent.kafka.serializers.AbstractKafkaSchemaSerDeConfig;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.common.serialization.StringSerializer;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
@@ -13,7 +14,9 @@ import org.springframework.kafka.core.DefaultKafkaProducerFactory;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.core.ProducerFactory;
 import org.springframework.kafka.support.serializer.JsonSerializer;
+import org.springframework.util.ReflectionUtils;
 
+import java.lang.reflect.Method;
 import java.util.HashMap;
 import java.util.Map;
 //Tạo ra các đối tượng để ứng dụng có thể gửi tin nhắn lên Kafka.
@@ -22,6 +25,7 @@ import java.util.Map;
 //import thư viện spring-kafka gốc của Spring
 @ConditionalOnClass(KafkaTemplate.class)
 @EnableConfigurationProperties(KafkaProperties.class)
+@Slf4j
 public class KafkaProducerAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean
@@ -45,15 +49,35 @@ public class KafkaProducerAutoConfiguration {
         p.put(ProducerConfig.COMPRESSION_TYPE_CONFIG, props.getProducer().getCompression());
         p.put(ProducerConfig.LINGER_MS_CONFIG, props.getProducer().getLingerMs());
         p.put(ProducerConfig.BATCH_SIZE_CONFIG, props.getProducer().getBatchSize());
-        //sẽ tạo (và cache) KafkaProducer theo config.
-        //KafkaTemplate sẽ dùng factory này để gửi message.
-        return new DefaultKafkaProducerFactory<>(p);
+
+        DefaultKafkaProducerFactory<String, Object> pf = new DefaultKafkaProducerFactory<>(p);
+
+        if (props.getObservability().isObservationEnabled()) {
+            invokeIfPresent(pf, "setObservationEnabled", true);
+        }
+        return pf;
     }
 
     @Bean
     @ConditionalOnMissingBean
     //Tạo bean KafkaTemplate đây là (interface) mà các developer sẽ @Autowired vào code của họ để gọi hàm send()
-    public KafkaTemplate<String, Object> kafkaTemplate(ProducerFactory<String, Object> pf) {
-        return new KafkaTemplate<>(pf);
+    public KafkaTemplate<String, Object> kafkaTemplate(ProducerFactory<String, Object> pf, KafkaProperties props) {
+        KafkaTemplate<String, Object> template = new KafkaTemplate<>(pf);
+
+        if (props.getObservability().isObservationEnabled()) {
+            invokeIfPresent(template, "setObservationEnabled", true);
+        }
+        return template;
+    }
+
+    private static void invokeIfPresent(Object target, String methodName, boolean arg) {
+        Method m = ReflectionUtils.findMethod(target.getClass(), methodName, boolean.class);
+        if (m == null) return;
+        try {
+            ReflectionUtils.makeAccessible(m);
+            m.invoke(target, arg);
+        } catch (Exception ex) {
+            log.warn("Failed to call {}.{}({})", target.getClass().getSimpleName(), methodName, arg, ex);
+        }
     }
 }

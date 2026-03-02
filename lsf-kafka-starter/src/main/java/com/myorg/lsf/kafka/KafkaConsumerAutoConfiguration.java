@@ -1,6 +1,7 @@
 package com.myorg.lsf.kafka;
 
 import io.confluent.kafka.serializers.AbstractKafkaSchemaSerDeConfig;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
@@ -13,15 +14,17 @@ import org.springframework.kafka.core.ConsumerFactory;
 import org.springframework.kafka.core.DefaultKafkaConsumerFactory;
 import org.springframework.kafka.listener.CommonErrorHandler;
 import org.springframework.kafka.listener.ContainerProperties;
-import org.springframework.kafka.support.serializer.JsonDeserializer;
+import org.springframework.util.ReflectionUtils;
 import org.springframework.util.StringUtils;
 
+import java.lang.reflect.Method;
 import java.util.HashMap;
 import java.util.Map;
 //lắng nghe tin nhắn từ Kafka.
 @AutoConfiguration(before = org.springframework.boot.autoconfigure.kafka.KafkaAutoConfiguration.class)
 @ConditionalOnClass(ConcurrentKafkaListenerContainerFactory.class)
 @EnableConfigurationProperties(KafkaProperties.class)
+@Slf4j
 public class KafkaConsumerAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean
@@ -73,6 +76,28 @@ public class KafkaConsumerAutoConfiguration {
                         : ContainerProperties.AckMode.RECORD
         );
         f.setCommonErrorHandler(eh);
+        if (props.getObservability().isObservationEnabled()) {
+            // Spring Kafka: ContainerProperties.setObservationEnabled(true) enables Observations/Tracing
+            // NOTE: Observation spans do NOT support batch listener.
+            if (props.getConsumer().isBatch() && props.getObservability().isWarnOnBatch()) {
+                log.warn("lsf.kafka.consumer.batch=true but observationEnabled=true. " +
+                        "Spring Kafka Observation does not support batch listener spans. " +
+                        "Set lsf.kafka.consumer.batch=false if you want tracing spans per record.");
+            }
+            invokeIfPresent(f.getContainerProperties(), "setObservationEnabled", true);
+        }
+
         return f;
+    }
+
+    private static void invokeIfPresent(Object target, String methodName, boolean arg) {
+        Method m = ReflectionUtils.findMethod(target.getClass(), methodName, boolean.class);
+        if (m == null) return;
+        try {
+            ReflectionUtils.makeAccessible(m);
+            m.invoke(target, arg);
+        } catch (Exception ex) {
+            log.warn("Failed to call {}.{}({})", target.getClass().getSimpleName(), methodName, arg, ex);
+        }
     }
 }
